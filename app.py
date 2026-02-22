@@ -4,10 +4,8 @@ import PyPDF2
 import re
 from io import BytesIO
 
-# Pagina instellingen
 st.set_page_config(page_title="Certus - RTB Import Tool", page_icon="🚂", layout="wide")
 
-# Logo sectie
 try:
     st.image("logo.png", width=250)
 except:
@@ -26,54 +24,56 @@ def rtb_pdf_naar_railcube(pdf_file):
         lines = text.split('\n')
         
         for line in lines:
-            # We zoeken naar het wagennummer (bijv: 37 80 7929 409-6)
-            # Dit is ons 'anker' punt.
-            wagon_match = re.search(r'(\d{2})\s+(\d{2})\s+(\d{4})\s+(\d{3}-\d)', line)
+            # We zoeken het begin van de regel.
+            # \d+? (lazy) zorgt ervoor dat als PDF '1' en '37' samenvoegt tot '137', hij dit netjes splitst in '1' en '37'.
+            match = re.search(r'^\s*(\d+?)\s*(\d{2})\s*(\d{2})\s*(\d{4})\s*(\d{3}-\d)\s+([A-Za-z]+)\s+(.*)', line)
             
-            if wagon_match:
-                # We halen alle getallen uit de regel
-                # RTB regels eindigen ALTIJD op: Lengte, Tara, Lading, Totaal, RemP, RemG
-                numbers = re.findall(r'\d+', line)
-                
-                # Het eerste getal in de regel is de 'Pos' (positie)
-                pos = numbers[0]
-                
-                # Het wagennummer (zonder streepjes)
-                w_nr = "".join(wagon_match.groups()).replace('-', '')
-                
-                # We pakken de gewichten van ACHTEREN naar VOREN (negatieve index)
-                # Omdat de opmerkingen (UN-nummers) achteraan staan, kijken we specifiek naar de posities vòòr de stationscodes
-                try:
-                    # RTB Layout: ... Lengte(dm) Tara(kg) Lading(kg) Totaal(kg) RemP(kg) RemG(kg) ...
-                    # In de meeste regels zijn dit de getallen op deze posities vanaf het wagennummer:
-                    tarra_kg = float(numbers[-6])
-                    lading_kg = float(numbers[-5])
-                    totaal_kg = float(numbers[-4])
-                    rem_p_kg = float(numbers[-3])
-                    lengte_dm = float(numbers[-7])
-                    assen = int(numbers[5]) # Assen staat meestal direct na het type
-                    
-                    # UN-nummer zoeken (UN + 4 cijfers)
-                    un_match = re.search(r'UN\s*(\d{4})', line)
-                    un_nr = un_match.group(1) if un_match else ""
+            if match:
+                pos = int(match.group(1)) # Dit is nu weer netjes 1, 2, 3...
+                w_nr = match.group(2) + match.group(3) + match.group(4) + match.group(5).replace('-', '')
+                w_type = match.group(6)
+                rest_van_regel = match.group(7)
 
+                # UN-nummer veilig apart zoeken
+                un_match = re.search(r'UN\s*(\d{4})', line)
+                un_nr = un_match.group(1) if un_match else ""
+
+                # Haal alle overgebleven getallen uit de rest van de regel
+                nums = re.findall(r'\d+', rest_van_regel)
+                
+                # Zoek de lengte (dit is bij RTB altijd het eerste getal in deze reeks boven de 100, bijv 167)
+                idx_lengte = -1
+                for i, n in enumerate(nums):
+                    if float(n) >= 100:
+                        idx_lengte = i
+                        break
+                        
+                # Als we de lengte hebben gevonden, staan de gewichten daar altijd exact achter
+                if idx_lengte != -1 and len(nums) >= idx_lengte + 5:
+                    lengte_dm = float(nums[idx_lengte])
+                    tarra_kg = float(nums[idx_lengte+1])
+                    lading_kg = float(nums[idx_lengte+2])
+                    bruto_kg = float(nums[idx_lengte+3])
+                    rem_p_kg = float(nums[idx_lengte+4])
+                    
+                    # Het aantal assen staat net vóór de lengte
+                    assen_str = str(nums[idx_lengte-1]) if idx_lengte > 0 else "4"
+                    assen = int(assen_str[-1]) # Pakt de '4' uit '4' of samengevoegde '04'
+                    
                     wagons.append({
-                        'Type': "Zacns", # Standaard voor deze lijst
-                        'Volgorde': int(pos),
+                        'Type': w_type,
+                        'Volgorde': pos,
                         'Kenteken': w_nr,
                         'Netto': lading_kg / 1000.0,
                         'Tarra': tarra_kg / 1000.0,
-                        'Bruto': totaal_kg / 1000.0,
+                        'Bruto': bruto_kg / 1000.0,
                         'Lengte': lengte_dm / 10.0,
-                        'Assen': assen if assen < 10 else 4,
+                        'Assen': assen,
                         'RemP': rem_p_kg / 1000.0,
                         'UN': un_nr
                     })
-                except:
-                    continue
-                    
     except Exception as e:
-        st.error(f"Fout bij verwerking: {e}")
+        st.error(f"Fout bij verwerking van PDF: {e}")
         return pd.DataFrame()
 
     if not wagons:
@@ -103,6 +103,9 @@ def rtb_pdf_naar_railcube(pdf_file):
             headers[19]: w['UN']
         }
         df_result = pd.concat([df_result, pd.DataFrame([row])], ignore_index=True)
+    
+    # Vervang NaN door lege strings voor een nettere weergave
+    df_result = df_result.fillna("")
     return df_result
 
 st.write("### 📂 Stap 1: Upload PDF")
@@ -111,7 +114,7 @@ upped = st.file_uploader("Sleep de RTB PDF hierheen", type="pdf")
 if upped:
     df = rtb_pdf_naar_railcube(upped)
     if not df.empty:
-        st.success(f"✅ {len(df)} wagens gevonden!")
+        st.success(f"✅ {len(df)} wagens gevonden en perfect uitgelijnd!")
         st.write("### 📊 Overzicht")
         st.dataframe(df, use_container_width=True)
         
@@ -126,6 +129,6 @@ if upped:
                 worksheet.set_column(col_num, col_num, 20)
 
         st.write("### 💾 Stap 2: Download")
-        st.download_button(label="📥 Download Excel voor RailCube", data=output.getvalue(), file_name="RTB_RailCube_Import.xlsx")
+        st.download_button(label="📥 Download Excel voor RailCube Hermes", data=output.getvalue(), file_name="RTB_RailCube_Import.xlsx")
     else:
-        st.error("❌ Geen gegevens gevonden. Controleer of de PDF de juiste indeling heeft.")
+        st.error("❌ Geen gegevens gevonden. Controleer de indeling van de PDF.")
