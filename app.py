@@ -25,46 +25,63 @@ def rtb_pdf_naar_railcube(pdf_file):
         
         lines = text.split('\n')
         for line in lines:
-            # We zoeken regels die beginnen met een positie-nummer (1 t/m 30)
-            if re.search(r'^\s*\d+\s+37\s+8[04]\s+', line):
+            # We zoeken naar het patroon van een wagennummer: bijv. 37 80 7929 409-6
+            # Dit is de ankerplek voor een wagon-regel
+            wagon_match = re.search(r'(\d{2})\s+(\d{2})\s+(\d{4})\s+(\d{3}-\d)', line)
+            
+            if wagon_match:
                 parts = line.split()
+                # Het wagennummer samenstellen
+                w_nr = wagon_match.group(1) + wagon_match.group(2) + wagon_match.group(3) + wagon_match.group(4).replace('-', '')
                 
-                # We weten dat bij RTB de gewichten en remgegevens aan het einde staan
-                # We tellen vanaf het einde van de rij (negatieve index)
-                # [..., Tara, Lading, Totaal, RemP, RemG]
-                try:
-                    rem_p = float(parts[-3]) / 1000.0
-                    bruto_ton = float(parts[-4]) / 1000.0
-                    lading_ton = float(parts[-5]) / 1000.0
-                    tarra_ton = float(parts[-6]) / 1000.0
-                    lengte_m = float(parts[-7]) / 10.0
-                    assen = int(parts[-8])
-                    
-                    # Wagennummer samenstellen uit de losse PDF delen
-                    # Meestal zijn dit parts[1], parts[2], parts[3]
-                    w_nr = parts[1] + parts[2] + parts[3].replace('-', '')
-                    
-                    # UN-nummer zoeken in de hele regel
-                    un_match = re.search(r'UN\s*(\d{4})', line)
-                    un_nummer = un_match.group(1) if un_match else ""
+                # Zoek alle getallen in de regel om de gewichten te vinden
+                # RTB regels hebben vaak 11 tot 13 getal-blokken
+                numbers = re.findall(r'\d+', line)
+                
+                if len(numbers) >= 10:
+                    # Bij RTB staan de gewichten altijd aan het einde voor de remgegevens
+                    # We pakken ze van achteren naar voren om verschuivingen voorin op te vangen
+                    try:
+                        rem_p = float(numbers[-1]) / 1000.0
+                        bruto_kg = float(numbers[-2])
+                        lading_kg = float(numbers[-3])
+                        tarra_kg = float(numbers[-4])
+                        lengte_dm = float(numbers[-5])
+                        # Assen staat meestal voor de lengte
+                        assen_v = int(numbers[-6])
+                        if assen_v > 10: # Soms pakt hij een deel van het wagennummer
+                            assen = 4
+                        else:
+                            assen = assen_v
 
-                    wagons.append({
-                        'Type': parts[4],
-                        'Volgorde': int(parts[0]),
-                        'Kenteken': w_nr,
-                        'Netto': lading_ton,
-                        'Tarra': tarra_ton,
-                        'Bruto': bruto_ton,
-                        'Lengte': lengte_m,
-                        'Assen': assen,
-                        'RemP': rem_p,
-                        'UN': un_nummer
-                    })
-                except (ValueError, IndexError):
-                    continue
+                        # UN-nummer zoeken (UN + 4 cijfers)
+                        un_match = re.search(r'UN\s*(\d{4})', line)
+                        un_nummer = un_match.group(1) if un_match else ""
+
+                        # Type is vaak het eerste woord na het wagennummer
+                        type_match = re.search(r'-\d\s+([A-Z][a-z]+)', line)
+                        w_type = type_match.group(1) if type_match else "Zacns"
+
+                        wagons.append({
+                            'Type': w_type,
+                            'Volgorde': int(numbers[0]) if len(numbers[0]) < 3 else 1,
+                            'Kenteken': w_nr,
+                            'Netto': lading_kg / 1000.0,
+                            'Tarra': tarra_kg / 1000.0,
+                            'Bruto': bruto_kg / 1000.0,
+                            'Lengte': lengte_dm / 10.0,
+                            'Assen': assen,
+                            'RemP': rem_p,
+                            'UN': un_nummer
+                        })
+                    except:
+                        continue
                     
     except Exception as e:
         st.error(f"Fout bij verwerken: {e}")
+        return pd.DataFrame()
+
+    if not wagons:
         return pd.DataFrame()
 
     headers = [
@@ -99,7 +116,7 @@ upped = st.file_uploader("Sleep de RTB PDF hierheen", type="pdf")
 if upped:
     df = rtb_pdf_naar_railcube(upped)
     if not df.empty:
-        st.success("Wagens correct geanalyseerd!")
+        st.success(f"✅ {len(df)} wagens gevonden!")
         st.dataframe(df, use_container_width=True)
         
         output = BytesIO()
@@ -115,4 +132,7 @@ if upped:
                 worksheet.write(0, col_num, value, header_format)
                 worksheet.set_column(col_num, col_num, 20)
 
+        st.write("### 💾 Stap 2: Download voor RailCube")
         st.download_button(label="📥 Download Excel voor RailCube", data=output.getvalue(), file_name="RTB_RailCube_Import.xlsx")
+    else:
+        st.error("❌ Geen wagens herkend in dit bestand. Controleer of het een standaard RTB PDF is.")
