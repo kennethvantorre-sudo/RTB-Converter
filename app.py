@@ -24,12 +24,11 @@ def rtb_pdf_naar_railcube(pdf_file):
         lines = text.split('\n')
         
         for line in lines:
-            # We zoeken het begin van de regel.
-            # \d+? (lazy) zorgt ervoor dat als PDF '1' en '37' samenvoegt tot '137', hij dit netjes splitst in '1' en '37'.
+            # We zoeken het begin van de regel
             match = re.search(r'^\s*(\d+?)\s*(\d{2})\s*(\d{2})\s*(\d{4})\s*(\d{3}-\d)\s+([A-Za-z]+)\s+(.*)', line)
             
             if match:
-                pos = int(match.group(1)) # Dit is nu weer netjes 1, 2, 3...
+                pos = int(match.group(1))
                 w_nr = match.group(2) + match.group(3) + match.group(4) + match.group(5).replace('-', '')
                 w_type = match.group(6)
                 rest_van_regel = match.group(7)
@@ -38,27 +37,40 @@ def rtb_pdf_naar_railcube(pdf_file):
                 un_match = re.search(r'UN\s*(\d{4})', line)
                 un_nr = un_match.group(1) if un_match else ""
 
-                # Haal alle overgebleven getallen uit de rest van de regel
                 nums = re.findall(r'\d+', rest_van_regel)
                 
-                # Zoek de lengte (dit is bij RTB altijd het eerste getal in deze reeks boven de 100, bijv 167)
+                # Zoek de lengte (bij RTB eerste getal in deze reeks boven de 100)
                 idx_lengte = -1
                 for i, n in enumerate(nums):
                     if float(n) >= 100:
                         idx_lengte = i
                         break
                         
-                # Als we de lengte hebben gevonden, staan de gewichten daar altijd exact achter
-                if idx_lengte != -1 and len(nums) >= idx_lengte + 5:
+                if idx_lengte != -1 and len(nums) >= idx_lengte + 4:
                     lengte_dm = float(nums[idx_lengte])
-                    tarra_kg = float(nums[idx_lengte+1])
-                    lading_kg = float(nums[idx_lengte+2])
-                    bruto_kg = float(nums[idx_lengte+3])
-                    rem_p_kg = float(nums[idx_lengte+4])
+                    tara_val = float(nums[idx_lengte+1])
+                    val2 = float(nums[idx_lengte+2])
+                    val3 = float(nums[idx_lengte+3])
                     
-                    # Het aantal assen staat net vóór de lengte
+                    # WISKUNDIGE CHECK: Heeft de PDF de '0' (lading) overgeslagen?
+                    # Check of Tarra (tara_val) + Lading (val2) = Bruto (val3)
+                    if abs((tara_val + val2) - val3) <= 10:
+                        # De '0' is netjes uitgelezen
+                        tarra_kg = tara_val
+                        lading_kg = val2
+                        bruto_kg = val3
+                        rem_p_kg = float(nums[idx_lengte+4]) if len(nums) > idx_lengte + 4 else 0.0
+                    else:
+                        # De '0' ontbreekt in de PDF-tekst!
+                        # val2 is dus het Bruto gewicht en val3 is RemP. We berekenen de lading zelf.
+                        tarra_kg = tara_val
+                        bruto_kg = val2
+                        lading_kg = bruto_kg - tarra_kg # Tarra - Bruto = 0 bij een lege wagen
+                        rem_p_kg = val3
+                    
+                    # Assen ophalen (staat vóór de lengte)
                     assen_str = str(nums[idx_lengte-1]) if idx_lengte > 0 else "4"
-                    assen = int(assen_str[-1]) # Pakt de '4' uit '4' of samengevoegde '04'
+                    assen = int(assen_str[-1]) 
                     
                     wagons.append({
                         'Type': w_type,
@@ -73,7 +85,7 @@ def rtb_pdf_naar_railcube(pdf_file):
                         'UN': un_nr
                     })
     except Exception as e:
-        st.error(f"Fout bij verwerking van PDF: {e}")
+        st.error(f"Fout bij verwerking: {e}")
         return pd.DataFrame()
 
     if not wagons:
@@ -104,7 +116,6 @@ def rtb_pdf_naar_railcube(pdf_file):
         }
         df_result = pd.concat([df_result, pd.DataFrame([row])], ignore_index=True)
     
-    # Vervang NaN door lege strings voor een nettere weergave
     df_result = df_result.fillna("")
     return df_result
 
@@ -114,7 +125,7 @@ upped = st.file_uploader("Sleep de RTB PDF hierheen", type="pdf")
 if upped:
     df = rtb_pdf_naar_railcube(upped)
     if not df.empty:
-        st.success(f"✅ {len(df)} wagens gevonden en perfect uitgelijnd!")
+        st.success(f"✅ {len(df)} wagens gevonden en wiskundig gecontroleerd!")
         st.write("### 📊 Overzicht")
         st.dataframe(df, use_container_width=True)
         
