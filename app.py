@@ -25,44 +25,46 @@ def rtb_pdf_naar_railcube(pdf_file):
         
         lines = text.split('\n')
         for line in lines:
-            # We zoeken de rij die begint met de positie (Pos)
-            match = re.search(r'^(\d+)\s+(\d{2})\s+(\d{4})\s+(\d{3}-\d)\s+([A-Za-z]+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)', line)
-            
-            if match:
-                pos_stuk = match.group(1)
-                start_nr = pos_stuk[-2:]
-                positie = int(pos_stuk[:-2])
-                wagon_nr = start_nr + match.group(2) + match.group(3) + match.group(4).replace('-', '')
+            # We zoeken regels die beginnen met een positie-nummer (1 t/m 30)
+            if re.search(r'^\s*\d+\s+37\s+8[04]\s+', line):
+                parts = line.split()
                 
-                # UN-nummer extractie
-                un_match = re.search(r'UN\s*(\d{4})', line)
-                un_nummer = un_match.group(1) if un_match else ""
-                
-                # GEWICHTEN FIX: We pakken exact de juiste groepen uit de PDF
-                # Groep 8 = Tara, Groep 9 = Lading, Groep 10 = Totaal (Bruto)
-                tarra_kg = float(match.group(8))
-                lading_kg = float(match.group(9))
-                bruto_kg = float(match.group(10))
-                
-                # Omrekenen naar tonnen (delen door 1000)
-                tarra_ton = tarra_kg / 1000.0
-                lading_ton = lading_kg / 1000.0
-                bruto_ton = bruto_kg / 1000.0
-                
-                wagons.append({
-                    'Type': match.group(5),
-                    'Volgorde': positie,
-                    'Kenteken': wagon_nr,
-                    'Netto': lading_ton,   # Dit is nu 0 bij een lege trein!
-                    'Tarra': tarra_ton,   # Dit is de 22.28
-                    'Bruto': bruto_ton,   # Totaal gewicht
-                    'Lengte': float(match.group(7)) / 10.0,
-                    'Assen': int(match.group(6)) // 10,
-                    'RemP': float(match.group(11)) / 1000.0,
-                    'UN': un_nummer
-                })
+                # We weten dat bij RTB de gewichten en remgegevens aan het einde staan
+                # We tellen vanaf het einde van de rij (negatieve index)
+                # [..., Tara, Lading, Totaal, RemP, RemG]
+                try:
+                    rem_p = float(parts[-3]) / 1000.0
+                    bruto_ton = float(parts[-4]) / 1000.0
+                    lading_ton = float(parts[-5]) / 1000.0
+                    tarra_ton = float(parts[-6]) / 1000.0
+                    lengte_m = float(parts[-7]) / 10.0
+                    assen = int(parts[-8])
+                    
+                    # Wagennummer samenstellen uit de losse PDF delen
+                    # Meestal zijn dit parts[1], parts[2], parts[3]
+                    w_nr = parts[1] + parts[2] + parts[3].replace('-', '')
+                    
+                    # UN-nummer zoeken in de hele regel
+                    un_match = re.search(r'UN\s*(\d{4})', line)
+                    un_nummer = un_match.group(1) if un_match else ""
+
+                    wagons.append({
+                        'Type': parts[4],
+                        'Volgorde': int(parts[0]),
+                        'Kenteken': w_nr,
+                        'Netto': lading_ton,
+                        'Tarra': tarra_ton,
+                        'Bruto': bruto_ton,
+                        'Lengte': lengte_m,
+                        'Assen': assen,
+                        'RemP': rem_p,
+                        'UN': un_nummer
+                    })
+                except (ValueError, IndexError):
+                    continue
+                    
     except Exception as e:
-        st.error(f"Fout: {e}")
+        st.error(f"Fout bij verwerken: {e}")
         return pd.DataFrame()
 
     headers = [
