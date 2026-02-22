@@ -7,12 +7,11 @@ from io import BytesIO
 # Pagina instellingen
 st.set_page_config(page_title="Certus - RTB Import Tool", page_icon="🚂", layout="wide")
 
-# --- LOGO SECTIE ---
+# Logo sectie
 try:
     st.image("logo.png", width=250)
 except:
     st.title("🚂 RTB naar RailCube Converter")
-    st.write("*Certus Rail Solutions - Operationele Tool*")
 
 st.markdown("---")
 
@@ -25,9 +24,8 @@ def rtb_pdf_naar_railcube(pdf_file):
             text += page.extract_text() + "\n"
         
         lines = text.split('\n')
-        
         for line in lines:
-            # Regex voor wagongegevens
+            # We zoeken de rij die begint met de positie (Pos)
             match = re.search(r'^(\d+)\s+(\d{2})\s+(\d{4})\s+(\d{3}-\d)\s+([A-Za-z]+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)', line)
             
             if match:
@@ -40,28 +38,31 @@ def rtb_pdf_naar_railcube(pdf_file):
                 un_match = re.search(r'UN\s*(\d{4})', line)
                 un_nummer = un_match.group(1) if un_match else ""
                 
-                # Waarden omzetten
-                tarra = float(match.group(8)) / 1000.0
-                lading = float(match.group(9)) / 1000.0
-                bruto = float(match.group(10)) / 1000.0
-                lengte = float(match.group(7)) / 10.0
-                assen = int(match.group(6)) // 10
-                rem_p = float(match.group(11)) / 1000.0
+                # GEWICHTEN FIX: We pakken exact de juiste groepen uit de PDF
+                # Groep 8 = Tara, Groep 9 = Lading, Groep 10 = Totaal (Bruto)
+                tarra_kg = float(match.group(8))
+                lading_kg = float(match.group(9))
+                bruto_kg = float(match.group(10))
+                
+                # Omrekenen naar tonnen (delen door 1000)
+                tarra_ton = tarra_kg / 1000.0
+                lading_ton = lading_kg / 1000.0
+                bruto_ton = bruto_kg / 1000.0
                 
                 wagons.append({
                     'Type': match.group(5),
                     'Volgorde': positie,
                     'Kenteken': wagon_nr,
-                    'Netto': lading,
-                    'Tarra': tarra,
-                    'Bruto': bruto,
-                    'Lengte': lengte,
-                    'Assen': assen,
-                    'RemP': rem_p,
+                    'Netto': lading_ton,   # Dit is nu 0 bij een lege trein!
+                    'Tarra': tarra_ton,   # Dit is de 22.28
+                    'Bruto': bruto_ton,   # Totaal gewicht
+                    'Lengte': float(match.group(7)) / 10.0,
+                    'Assen': int(match.group(6)) // 10,
+                    'RemP': float(match.group(11)) / 1000.0,
                     'UN': un_nummer
                 })
     except Exception as e:
-        st.error(f"Fout bij verwerken PDF: {e}")
+        st.error(f"Fout: {e}")
         return pd.DataFrame()
 
     headers = [
@@ -96,8 +97,7 @@ upped = st.file_uploader("Sleep de RTB PDF hierheen", type="pdf")
 if upped:
     df = rtb_pdf_naar_railcube(upped)
     if not df.empty:
-        st.success(f"✅ {len(df)} wagens verwerkt!")
-        st.write("### 📊 Voorbeeld van data")
+        st.success("Wagens correct geanalyseerd!")
         st.dataframe(df, use_container_width=True)
         
         output = BytesIO()
@@ -105,21 +105,12 @@ if upped:
             df.to_excel(writer, index=False, sheet_name='Wagonlijst')
             workbook  = writer.book
             worksheet = writer.sheets['Wagonlijst']
-            
-            # HIER ZAT DE FOUT: add_format (volledig geschreven nu)
             header_format = workbook.add_format({
                 'text_wrap': True, 'align': 'center', 'valign': 'vcenter', 
                 'bold': True, 'bg_color': '#D7E4BC', 'border': 1
             })
-            
             for col_num, value in enumerate(df.columns.values):
                 worksheet.write(0, col_num, value, header_format)
                 worksheet.set_column(col_num, col_num, 20)
 
-        st.write("### 💾 Stap 2: Download voor RailCube")
-        st.download_button(
-            label="📥 Download Excel voor Hermes Import",
-            data=output.getvalue(),
-            file_name="RTB_RailCube_Import.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        st.download_button(label="📥 Download Excel voor RailCube", data=output.getvalue(), file_name="RTB_RailCube_Import.xlsx")
