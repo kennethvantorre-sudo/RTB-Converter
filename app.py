@@ -21,7 +21,7 @@ with st.sidebar:
     st.write("3. **Controleer** de tabel.")
     st.write("4. **Download** de Excel voor RailCube.")
     st.markdown("---")
-    st.caption("Operationele Tool v2.3")
+    st.caption("Operationele Tool v2.4")
 
 # --- DE MOTOR (ONGEWIJZIGD) ---
 def rtb_pdf_naar_railcube(pdf_file):
@@ -121,14 +121,19 @@ with col_main:
     st.write("### 📂 Stap 1: Upload PDF")
     upped = st.file_uploader("Sleep de PDF in dit vak", type="pdf")
 
-# 🎨 4. SFEERBEELD (Wordt getoond als er nog niets is geüpload)
+# 🎨 4. SFEERBEELD (Met onzichtbare kolommen om te centreren)
 if not upped:
     st.markdown("---")
-    try:
-        # HIER IS HET AANGEPAST: width=700 in plaats van use_container_width=True
-        st.image("loco.png", caption="Certus Rail Solutions", width=700)
-    except:
-        st.write("") 
+    
+    # We maken 3 kolommen: Links (1 deel), Midden (2 delen), Rechts (1 deel)
+    col_img_links, col_img_midden, col_img_rechts = st.columns([1, 2, 1])
+    
+    with col_img_midden:
+        try:
+            # Door use_container_width=True vult hij exact de middelste kolom (en staat dus in het midden!)
+            st.image("loco.png", caption="Certus Rail Solutions", use_container_width=True)
+        except:
+            st.write("") 
 
 st.markdown("---")
 
