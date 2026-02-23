@@ -4,15 +4,26 @@ import PyPDF2
 import re
 from io import BytesIO
 
+# 🎨 1. PAGINA INSTELLINGEN (Nu met een mooie titel en layout)
 st.set_page_config(page_title="Certus - RTB Import Tool", page_icon="🚂", layout="wide")
 
-try:
-    st.image("logo.png", width=250)
-except:
-    st.title("🚂 Certus RTB Converter")
+# 🎨 2. DE ZIJBALK (SIDEBAR) VOOR INSTRUCTIES
+with st.sidebar:
+    try:
+        st.image("logo.png", width=180)
+    except:
+        st.write("🚂 **Certus Rail Solutions**")
+    
+    st.markdown("---")
+    st.header("📌 Hoe werkt het?")
+    st.write("1. **Download** de wagonlijst (PDF) van RTB.")
+    st.write("2. **Upload** de PDF in het vak hiernaast.")
+    st.write("3. **Controleer** de tabel.")
+    st.write("4. **Download** de Excel voor RailCube.")
+    st.markdown("---")
+    st.caption("Operationele Tool v2.0")
 
-st.markdown("---")
-
+# --- HIER BEGINT DE MOTOR (ONGEWIJZIGD!) ---
 def rtb_pdf_naar_railcube(pdf_file):
     wagons = []
     try:
@@ -22,24 +33,18 @@ def rtb_pdf_naar_railcube(pdf_file):
             text += page.extract_text() + "\n"
         
         lines = text.split('\n')
-        
         for line in lines:
-            # We zoeken het begin van de regel
             match = re.search(r'^\s*(\d+?)\s*(\d{2})\s*(\d{2})\s*(\d{4})\s*(\d{3}-\d)\s+([A-Za-z]+)\s+(.*)', line)
-            
             if match:
                 pos = int(match.group(1))
                 w_nr = match.group(2) + match.group(3) + match.group(4) + match.group(5).replace('-', '')
                 w_type = match.group(6)
                 rest_van_regel = match.group(7)
 
-                # UN-nummer veilig apart zoeken
                 un_match = re.search(r'UN\s*(\d{4})', line)
                 un_nr = un_match.group(1) if un_match else ""
 
                 nums = re.findall(r'\d+', rest_van_regel)
-                
-                # Zoek de lengte (bij RTB eerste getal in deze reeks boven de 100)
                 idx_lengte = -1
                 for i, n in enumerate(nums):
                     if float(n) >= 100:
@@ -52,37 +57,24 @@ def rtb_pdf_naar_railcube(pdf_file):
                     val2 = float(nums[idx_lengte+2])
                     val3 = float(nums[idx_lengte+3])
                     
-                    # WISKUNDIGE CHECK: Heeft de PDF de '0' (lading) overgeslagen?
-                    # Check of Tarra (tara_val) + Lading (val2) = Bruto (val3)
                     if abs((tara_val + val2) - val3) <= 10:
-                        # De '0' is netjes uitgelezen
                         tarra_kg = tara_val
                         lading_kg = val2
                         bruto_kg = val3
                         rem_p_kg = float(nums[idx_lengte+4]) if len(nums) > idx_lengte + 4 else 0.0
                     else:
-                        # De '0' ontbreekt in de PDF-tekst!
-                        # val2 is dus het Bruto gewicht en val3 is RemP. We berekenen de lading zelf.
                         tarra_kg = tara_val
                         bruto_kg = val2
-                        lading_kg = bruto_kg - tarra_kg # Tarra - Bruto = 0 bij een lege wagen
+                        lading_kg = bruto_kg - tarra_kg 
                         rem_p_kg = val3
                     
-                    # Assen ophalen (staat vóór de lengte)
                     assen_str = str(nums[idx_lengte-1]) if idx_lengte > 0 else "4"
                     assen = int(assen_str[-1]) 
                     
                     wagons.append({
-                        'Type': w_type,
-                        'Volgorde': pos,
-                        'Kenteken': w_nr,
-                        'Netto': lading_kg / 1000.0,
-                        'Tarra': tarra_kg / 1000.0,
-                        'Bruto': bruto_kg / 1000.0,
-                        'Lengte': lengte_dm / 10.0,
-                        'Assen': assen,
-                        'RemP': rem_p_kg / 1000.0,
-                        'UN': un_nr
+                        'Type': w_type, 'Volgorde': pos, 'Kenteken': w_nr,
+                        'Netto': lading_kg / 1000.0, 'Tarra': tarra_kg / 1000.0, 'Bruto': bruto_kg / 1000.0,
+                        'Lengte': lengte_dm / 10.0, 'Assen': assen, 'RemP': rem_p_kg / 1000.0, 'UN': un_nr
                     })
     except Exception as e:
         st.error(f"Fout bij verwerking: {e}")
@@ -111,22 +103,35 @@ def rtb_pdf_naar_railcube(pdf_file):
         row = {
             headers[0]: w['Type'], headers[1]: w['Volgorde'], headers[3]: w['Kenteken'],
             headers[4]: w['Netto'], headers[5]: w['Tarra'], headers[6]: w['Bruto'],
-            headers[7]: w['Lengte'], headers[8]: w['Assen'], headers[14]: w['RemP'],
-            headers[19]: w['UN']
+            headers[7]: w['Lengte'], headers[8]: w['Assen'], headers[14]: w['RemP'], headers[19]: w['UN']
         }
         df_result = pd.concat([df_result, pd.DataFrame([row])], ignore_index=True)
     
     df_result = df_result.fillna("")
     return df_result
+# --- HIER EINDIGT DE MOTOR ---
 
-st.write("### 📂 Stap 1: Upload PDF")
-upped = st.file_uploader("Sleep de RTB PDF hierheen", type="pdf")
+# 🎨 3. HET HOOFDSCHERM INRICHTEN
+# We maken een midden-kolom zodat het scherm niet eindeloos breed is
+col_spacer1, col_main, col_spacer2 = st.columns([1, 2, 1])
 
+with col_main:
+    # Een mooie welkomst-boodschap
+    st.title("RTB naar RailCube Converter")
+    st.info("👋 **Welkom!** Zet de RTB wagenlijsten in enkele seconden om naar een Hermes import-bestand.")
+    
+    st.write("### 📂 Stap 1: Upload PDF")
+    upped = st.file_uploader("Sleep de RTB PDF in dit vak", type="pdf")
+
+st.markdown("---")
+
+# 🎨 4. DE DATA WEERGAVE (Blijft lekker breed zodat de tabel past)
 if upped:
     df = rtb_pdf_naar_railcube(upped)
     if not df.empty:
-        st.success(f"✅ {len(df)} wagens gevonden en wiskundig gecontroleerd!")
-        st.write("### 📊 Overzicht")
+        st.success(f"✅ Succes! Er zijn **{len(df)} wagens** verwerkt en gecontroleerd.")
+        
+        st.write("### 📊 Voorbeeld van de Export")
         st.dataframe(df, use_container_width=True)
         
         output = BytesIO()
@@ -139,7 +144,15 @@ if upped:
                 worksheet.write(0, col_num, value, header_format)
                 worksheet.set_column(col_num, col_num, 20)
 
-        st.write("### 💾 Stap 2: Download")
-        st.download_button(label="📥 Download Excel voor RailCube Hermes", data=output.getvalue(), file_name="RTB_RailCube_Import.xlsx")
+        # De download knop extra groot en opvallend in het midden
+        col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+        with col_btn2:
+            st.write("### 💾 Stap 2: Download")
+            st.download_button(
+                label="📥 Download Excel voor Hermes", 
+                data=output.getvalue(), 
+                file_name="RTB_RailCube_Import.xlsx",
+                use_container_width=True # Maakt de knop lekker breed
+            )
     else:
-        st.error("❌ Geen gegevens gevonden. Controleer de indeling van de PDF.")
+        st.error("❌ Geen gegevens gevonden. Controleer of je de juiste RTB PDF hebt geüpload.")
