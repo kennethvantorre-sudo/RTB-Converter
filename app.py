@@ -21,7 +21,7 @@ with st.sidebar:
     st.write("3. **Controleer** de tabel.")
     st.write("4. **Download** de Excel voor RailCube.")
     st.markdown("---")
-    st.caption("Operationele Tool v2.4")
+    st.caption("Operationele Tool v2.5")
 
 # --- DE MOTOR (ONGEWIJZIGD) ---
 def rtb_pdf_naar_railcube(pdf_file):
@@ -121,16 +121,16 @@ with col_main:
     st.write("### 📂 Stap 1: Upload PDF")
     upped = st.file_uploader("Sleep de PDF in dit vak", type="pdf")
 
-# 🎨 4. SFEERBEELD (Met onzichtbare kolommen om te centreren)
+# 🎨 4. SFEERBEELD (Met aangepaste kolommen voor de grootte)
 if not upped:
     st.markdown("---")
     
-    # We maken 3 kolommen: Links (1 deel), Midden (2 delen), Rechts (1 deel)
-    col_img_links, col_img_midden, col_img_rechts = st.columns([1, 2, 1])
+    # HIER IS DE AANPASSING: De verhouding is nu [2, 3, 2]
+    # Dit maakt de middelste kolom ietsje smaller t.o.v. de zijkanten
+    col_img_links, col_img_midden, col_img_rechts = st.columns([2, 3, 2])
     
     with col_img_midden:
         try:
-            # Door use_container_width=True vult hij exact de middelste kolom (en staat dus in het midden!)
             st.image("loco.png", caption="Certus Rail Solutions", use_container_width=True)
         except:
             st.write("") 
