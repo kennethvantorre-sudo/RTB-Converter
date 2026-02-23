@@ -21,7 +21,7 @@ with st.sidebar:
     st.write("3. **Controleer** de tabel.")
     st.write("4. **Download** de Excel voor RailCube.")
     st.markdown("---")
-    st.caption("Operationele Tool v2.1")
+    st.caption("Operationele Tool v2.2")
 
 # --- DE MOTOR (ONGEWIJZIGD) ---
 def rtb_pdf_naar_railcube(pdf_file):
@@ -124,14 +124,11 @@ with col_main:
 # 🎨 4. SFEERBEELD (Wordt getoond als er nog niets is geüpload)
 if not upped:
     st.markdown("---")
-    # Zorg dat je het bestand 'loco.jpg' (of .png) uploadt naar GitHub!
-    # use_container_width zorgt dat de foto mooi over de breedte vult.
     try:
-        # PAS OP: Als je foto een PNG is, verander .jpg dan naar .png hieronder!
-        st.image("loco.jpg", caption="Certus Rail Solutions in actie", use_container_width=True)
+        # HIER IS HET AANGEPAST NAAR .png
+        st.image("loco.png", caption="Certus Rail Solutions", use_container_width=True)
     except:
-        # Een placeholder tekstje als de foto nog niet is geüpload
-        st.write("") # Leeg laten als er geen foto is
+        st.write("") 
 
 st.markdown("---")
 
