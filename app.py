@@ -3,7 +3,6 @@ import pandas as pd
 import PyPDF2
 import re
 from io import BytesIO
-import plotly.express as px
 from datetime import datetime
 import base64
 
@@ -183,8 +182,6 @@ with col_main:
 if not upped:
     st.markdown("---")
     
-    # HIER IS DE AANPASSING: De verhouding is nu [2, 3, 2]
-    # Dit maakt de middelste kolom ietsje smaller t.o.v. de zijkanten
     col_img_links, col_img_midden, col_img_rechts = st.columns([2, 3, 2])
     
     with col_img_midden:
