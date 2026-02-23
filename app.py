@@ -21,7 +21,7 @@ with st.sidebar:
     st.write("3. **Controleer** de tabel.")
     st.write("4. **Download** de Excel voor RailCube.")
     st.markdown("---")
-    st.caption("Operationele Tool v2.2")
+    st.caption("Operationele Tool v2.3")
 
 # --- DE MOTOR (ONGEWIJZIGD) ---
 def rtb_pdf_naar_railcube(pdf_file):
@@ -125,8 +125,8 @@ with col_main:
 if not upped:
     st.markdown("---")
     try:
-        # HIER IS HET AANGEPAST NAAR .png
-        st.image("loco.png", caption="Certus Rail Solutions", use_container_width=True)
+        # HIER IS HET AANGEPAST: width=700 in plaats van use_container_width=True
+        st.image("loco.png", caption="Certus Rail Solutions", width=700)
     except:
         st.write("") 
 
