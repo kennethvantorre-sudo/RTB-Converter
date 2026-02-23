@@ -3,9 +3,67 @@ import pandas as pd
 import PyPDF2
 import re
 from io import BytesIO
+import plotly.express as px
+from datetime import datetime
+import base64
 
 # 🎨 1. PAGINA INSTELLINGEN
 st.set_page_config(page_title="Certus - RTB Import Tool", page_icon="🚂", layout="wide")
+
+# --- ✨ MAGISCHE START ANIMATIE ✨ ---
+def speel_certus_animatie():
+    # Zorgt dat de animatie alleen de eerste keer afspeelt
+    if 'animatie_gespeeld' not in st.session_state:
+        try:
+            with open("logo.png", "rb") as f:
+                data = f.read()
+                b64_logo = base64.b64encode(data).decode("utf-8")
+                
+            css_animatie = f"""
+            <style>
+            #splash-screen {{
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background-color: #0e1117;
+                z-index: 99999;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                animation: fadeOut 1.5s forwards;
+                animation-delay: 2s;
+                pointer-events: none;
+            }}
+            #splash-logo {{
+                width: 350px;
+                animation: moveAndShrink 1.5s forwards;
+                animation-delay: 1.5s;
+            }}
+            
+            @keyframes fadeOut {{
+                0% {{ opacity: 1; }}
+                100% {{ opacity: 0; visibility: hidden; }}
+            }}
+            
+            @keyframes moveAndShrink {{
+                0% {{ transform: scale(1) translate(0, 0); opacity: 1; }}
+                100% {{ transform: scale(0.3) translate(-100vw, -100vh); opacity: 0; }}
+            }}
+            </style>
+            <div id="splash-screen">
+                <img id="splash-logo" src="data:image/png;base64,{b64_logo}">
+            </div>
+            """
+            st.markdown(css_animatie, unsafe_allow_html=True)
+            st.session_state.animatie_gespeeld = True
+        except Exception as e:
+            st.warning(f"⚠️ Animatie tip: Ik kan 'logo.png' niet vinden. Zorg dat het bestand exact zo heet in GitHub.")
+
+# Roep de animatie aan!
+speel_certus_animatie()
+# ------------------------------------
 
 # 🎨 2. ZIJBALK (SIDEBAR)
 with st.sidebar:
