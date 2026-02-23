@@ -4,10 +4,10 @@ import PyPDF2
 import re
 from io import BytesIO
 
-# 🎨 1. PAGINA INSTELLINGEN (Nu met een mooie titel en layout)
+# 🎨 1. PAGINA INSTELLINGEN
 st.set_page_config(page_title="Certus - RTB Import Tool", page_icon="🚂", layout="wide")
 
-# 🎨 2. DE ZIJBALK (SIDEBAR) VOOR INSTRUCTIES
+# 🎨 2. ZIJBALK (SIDEBAR)
 with st.sidebar:
     try:
         st.image("logo.png", width=180)
@@ -21,9 +21,9 @@ with st.sidebar:
     st.write("3. **Controleer** de tabel.")
     st.write("4. **Download** de Excel voor RailCube.")
     st.markdown("---")
-    st.caption("Operationele Tool v2.0")
+    st.caption("Operationele Tool v2.1")
 
-# --- HIER BEGINT DE MOTOR (ONGEWIJZIGD!) ---
+# --- DE MOTOR (ONGEWIJZIGD) ---
 def rtb_pdf_naar_railcube(pdf_file):
     wagons = []
     try:
@@ -109,27 +109,37 @@ def rtb_pdf_naar_railcube(pdf_file):
     
     df_result = df_result.fillna("")
     return df_result
-# --- HIER EINDIGT DE MOTOR ---
+# --- EINDE MOTOR ---
 
-# 🎨 3. HET HOOFDSCHERM INRICHTEN
-# We maken een midden-kolom zodat het scherm niet eindeloos breed is
+# 🎨 3. HOOFDSCHERM INRICHTING
 col_spacer1, col_main, col_spacer2 = st.columns([1, 2, 1])
 
 with col_main:
-    # Een mooie welkomst-boodschap
     st.title("RTB naar RailCube Converter")
-    st.info("👋 **Welkom!** Zet de RTB wagenlijsten in enkele seconden om naar een Hermes import-bestand.")
+    st.info("👋 **Welkom!** Upload hieronder de RTB wagenlijst (PDF).")
     
     st.write("### 📂 Stap 1: Upload PDF")
-    upped = st.file_uploader("Sleep de RTB PDF in dit vak", type="pdf")
+    upped = st.file_uploader("Sleep de PDF in dit vak", type="pdf")
+
+# 🎨 4. SFEERBEELD (Wordt getoond als er nog niets is geüpload)
+if not upped:
+    st.markdown("---")
+    # Zorg dat je het bestand 'loco.jpg' (of .png) uploadt naar GitHub!
+    # use_container_width zorgt dat de foto mooi over de breedte vult.
+    try:
+        # PAS OP: Als je foto een PNG is, verander .jpg dan naar .png hieronder!
+        st.image("loco.jpg", caption="Certus Rail Solutions in actie", use_container_width=True)
+    except:
+        # Een placeholder tekstje als de foto nog niet is geüpload
+        st.write("") # Leeg laten als er geen foto is
 
 st.markdown("---")
 
-# 🎨 4. DE DATA WEERGAVE (Blijft lekker breed zodat de tabel past)
+# 🎨 5. VERWERKING & DOWNLOAD
 if upped:
     df = rtb_pdf_naar_railcube(upped)
     if not df.empty:
-        st.success(f"✅ Succes! Er zijn **{len(df)} wagens** verwerkt en gecontroleerd.")
+        st.success(f"✅ Succes! Er zijn **{len(df)} wagens** klaar voor import.")
         
         st.write("### 📊 Voorbeeld van de Export")
         st.dataframe(df, use_container_width=True)
@@ -144,7 +154,6 @@ if upped:
                 worksheet.write(0, col_num, value, header_format)
                 worksheet.set_column(col_num, col_num, 20)
 
-        # De download knop extra groot en opvallend in het midden
         col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
         with col_btn2:
             st.write("### 💾 Stap 2: Download")
@@ -152,7 +161,7 @@ if upped:
                 label="📥 Download Excel voor Hermes", 
                 data=output.getvalue(), 
                 file_name="RTB_RailCube_Import.xlsx",
-                use_container_width=True # Maakt de knop lekker breed
+                use_container_width=True
             )
     else:
         st.error("❌ Geen gegevens gevonden. Controleer of je de juiste RTB PDF hebt geüpload.")
