@@ -76,7 +76,7 @@ with st.sidebar:
     st.write("3. **Controleer** de tabel.")
     st.write("4. **Download** de Excel voor RailCube.")
     st.markdown("---")
-    st.caption("Operationele Tool v3.3 - Hermes Compatible")
+    st.caption("Operationele Tool v3.4 - Dynamische UN Codes")
 
 # --- MOTOR 1: RTB CONVERTER ---
 def rtb_pdf_naar_railcube(pdf_file):
@@ -166,8 +166,9 @@ def rtb_pdf_naar_railcube(pdf_file):
     return df_result
 
 
-# --- MOTOR 2: DOUGLAS CONVERTER (Nieuw: Met exacte Hermes headers) ---
-def douglas_pdf_naar_railcube(pdf_file):
+# --- MOTOR 2: DOUGLAS CONVERTER ---
+# Let op: Hij accepteert nu de variabele 'un_code' vanuit het hoofdmenu!
+def douglas_pdf_naar_railcube(pdf_file, un_code):
     wagons = []
     try:
         reader = PyPDF2.PdfReader(pdf_file)
@@ -183,7 +184,6 @@ def douglas_pdf_naar_railcube(pdf_file):
                 wagon_raw = match.group(1)
                 loaded_kg_raw = match.group(4)
                 
-                # Formatteren
                 wagon_clean = re.sub(r'[\s-]', '', wagon_raw) 
                 loaded_tonnes = float(loaded_kg_raw.replace('.', '')) / 1000.0
                 
@@ -191,7 +191,7 @@ def douglas_pdf_naar_railcube(pdf_file):
                     "Volgorde": volgorde,
                     "Kenteken": wagon_clean,
                     "Netto": loaded_tonnes,
-                    "UN": "1863"
+                    "UN": un_code  # Hier wordt de gekozen code ingevuld
                 })
                 volgorde += 1
                 
@@ -202,7 +202,6 @@ def douglas_pdf_naar_railcube(pdf_file):
     if not wagons:
         return pd.DataFrame()
 
-    # Exact dezelfde headers als RTB!
     headers = [
         "Type\nType\nType", "Volgorde van de wagens\nOrdre de wagons\nWagons Order",
         "Goedkeuring materiaal\nApprobation matériel\nApprouval material",
@@ -242,6 +241,14 @@ with col_main:
     st.write("### 🏭 Stap 1: Kies het Type / De Bron")
     keuze_bron = st.selectbox("Van welke partij of locatie is de PDF afkomstig?", ["RTB", "Douglas Terminal"])
     
+    # NIEUW: Dynamische UN code keuze voor Douglas
+    un_keuze = ""
+    if keuze_bron == "Douglas Terminal":
+        st.write("### 🏷️ Stap 1b: Kies het UN-nummer")
+        gekozen_optie = st.radio("Welk product zit er in deze trein?", ["UN 1202 (Diesel/Gasoil)", "UN 1863 (Jet Fuel)"], horizontal=True)
+        # Strip de extra tekst weg zodat we puur het nummer "1202" of "1863" overhouden
+        un_keuze = gekozen_optie.split(" ")[1] 
+    
     st.write(f"### 📂 Stap 2: Upload de {keuze_bron} PDF")
     upped = st.file_uploader("Sleep de PDF in dit vak", type="pdf")
 
@@ -261,10 +268,11 @@ st.markdown("---")
 
 # 🎨 5. VERWERKING & DOWNLOAD
 if upped:
+    # Stuur de juiste variabelen naar de juiste motor
     if keuze_bron == "RTB":
         df = rtb_pdf_naar_railcube(upped)
     else:
-        df = douglas_pdf_naar_railcube(upped)
+        df = douglas_pdf_naar_railcube(upped, un_keuze)
 
     if not df.empty:
         st.success(f"✅ Succes! Er zijn **{len(df)} wagens** klaar voor import vanuit de {keuze_bron} PDF.")
