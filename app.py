@@ -1,17 +1,17 @@
 import streamlit as st
 import pandas as pd
 import PyPDF2
+import pdfplumber  # <-- NIEUW: Nodig voor Douglas!
 import re
 from io import BytesIO
 from datetime import datetime
 import base64
 
 # 🎨 1. PAGINA INSTELLINGEN
-st.set_page_config(page_title="Certus - RTB Import Tool", page_icon="🚂", layout="wide")
+st.set_page_config(page_title="Certus - Terminal Import Tool", page_icon="🚂", layout="wide")
 
 # --- ✨ MAGISCHE START ANIMATIE ✨ ---
 def speel_certus_animatie():
-    # Zorgt dat de animatie alleen de eerste keer afspeelt
     if 'animatie_gespeeld' not in st.session_state:
         try:
             with open("logo.png", "rb") as f:
@@ -73,14 +73,14 @@ with st.sidebar:
     
     st.markdown("---")
     st.header("📌 Hoe werkt het?")
-    st.write("1. **Download** de wagonlijst (PDF) van RTB.")
-    st.write("2. **Upload** de PDF in het vak hiernaast.")
+    st.write("1. **Kies** de juiste Terminal in het hoofdmenu.")
+    st.write("2. **Upload** de PDF van de beladingslijst.")
     st.write("3. **Controleer** de tabel.")
     st.write("4. **Download** de Excel voor RailCube.")
     st.markdown("---")
-    st.caption("Operationele Tool v2.5")
+    st.caption("Operationele Tool v3.0 - RTB & Douglas")
 
-# --- DE MOTOR (ONGEWIJZIGD) ---
+# --- MOTOR 1: RTB CONVERTER ---
 def rtb_pdf_naar_railcube(pdf_file):
     wagons = []
     try:
@@ -134,7 +134,7 @@ def rtb_pdf_naar_railcube(pdf_file):
                         'Lengte': lengte_dm / 10.0, 'Assen': assen, 'RemP': rem_p_kg / 1000.0, 'UN': un_nr
                     })
     except Exception as e:
-        st.error(f"Fout bij verwerking: {e}")
+        st.error(f"Fout bij verwerking RTB: {e}")
         return pd.DataFrame()
 
     if not wagons:
@@ -166,19 +166,47 @@ def rtb_pdf_naar_railcube(pdf_file):
     
     df_result = df_result.fillna("")
     return df_result
-# --- EINDE MOTOR ---
+
+# --- MOTOR 2: DOUGLAS CONVERTER ---
+def douglas_pdf_naar_railcube(pdf_file):
+    try:
+        with pdfplumber.open(pdf_file) as pdf:
+            tabel_data = pdf.pages[0].extract_table()
+
+        kolommen = ["Nr", "_Genegeerd", "Wagon", "CD_Cijfer", "Max_Ton", "Loaded_Kg", "Volume_L15"]
+        df = pd.DataFrame(tabel_data[1:], columns=kolommen)
+        
+        df = df.drop(columns=["_Genegeerd"])
+        df = df.dropna(subset=["Wagon"])
+        df = df[df["Wagon"].astype(str).str.strip() != "0"]
+        df["Wagon"] = df["Wagon"].str.replace(" ", "")
+        
+        df["UN_Nummer"] = "UN 1863"
+        df["Product"] = "B0 Diesel Blanc"
+
+        import_klaar = df[["Wagon", "Loaded_Kg", "UN_Nummer", "Product"]]
+        import_klaar.columns = ["Wagonnummer", "Gewicht_Kg", "UN_Code", "Goederen_Type"]
+        
+        return import_klaar
+    except Exception as e:
+        st.error(f"Fout bij verwerking Douglas: {e}")
+        return pd.DataFrame()
+
 
 # 🎨 3. HOOFDSCHERM INRICHTING
 col_spacer1, col_main, col_spacer2 = st.columns([1, 2, 1])
 
 with col_main:
-    st.title("RTB naar RailCube Converter")
-    st.info("👋 **Welkom!** Upload hieronder de RTB wagenlijst (PDF).")
+    st.title("RailCube Terminal Converter")
+    st.info("👋 **Welkom!** Kies eerst de Terminal en upload daarna de PDF.")
     
-    st.write("### 📂 Stap 1: Upload PDF")
+    st.write("### 🏭 Stap 1: Kies de Terminal")
+    keuze_terminal = st.selectbox("Voor welke terminal wil je een conversie doen?", ["RTB", "Douglas Terminal"])
+    
+    st.write(f"### 📂 Stap 2: Upload de {keuze_terminal} PDF")
     upped = st.file_uploader("Sleep de PDF in dit vak", type="pdf")
 
-# 🎨 4. SFEERBEELD (Met aangepaste kolommen voor de grootte)
+# 🎨 4. SFEERBEELD 
 if not upped:
     st.markdown("---")
     
@@ -194,9 +222,14 @@ st.markdown("---")
 
 # 🎨 5. VERWERKING & DOWNLOAD
 if upped:
-    df = rtb_pdf_naar_railcube(upped)
+    # Bepaal welke motor gestart moet worden!
+    if keuze_terminal == "RTB":
+        df = rtb_pdf_naar_railcube(upped)
+    else:
+        df = douglas_pdf_naar_railcube(upped)
+
     if not df.empty:
-        st.success(f"✅ Succes! Er zijn **{len(df)} wagens** klaar voor import.")
+        st.success(f"✅ Succes! Er zijn **{len(df)} wagens** klaar voor import vanuit de {keuze_terminal} PDF.")
         
         st.write("### 📊 Voorbeeld van de Export")
         st.dataframe(df, use_container_width=True)
@@ -213,12 +246,16 @@ if upped:
 
         col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
         with col_btn2:
-            st.write("### 💾 Stap 2: Download")
+            st.write("### 💾 Stap 3: Download")
+            
+            # Slimme bestandsnaam op basis van keuze
+            bestandsnaam = f"{keuze_terminal.replace(' ', '_')}_RailCube_Import.xlsx"
+            
             st.download_button(
-                label="📥 Download Excel voor Hermes", 
+                label="📥 Download Excel voor RailCube", 
                 data=output.getvalue(), 
-                file_name="RTB_RailCube_Import.xlsx",
+                file_name=bestandsnaam,
                 use_container_width=True
             )
     else:
-        st.error("❌ Geen gegevens gevonden. Controleer of je de juiste RTB PDF hebt geüpload.")
+        st.error(f"❌ Geen gegevens gevonden. Controleer of je écht een **{keuze_terminal}** PDF hebt geüpload.")
