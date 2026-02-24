@@ -206,12 +206,12 @@ col_spacer1, col_main, col_spacer2 = st.columns([1, 2, 1])
 
 with col_main:
     st.title("RailCube Terminal Converter")
-    st.info("👋 **Welkom!** Kies eerst het type en upload daarna de PDF.")
+    st.info("👋 **Welkom!** Kies eerst de Terminal en upload daarna de PDF.")
     
-    st.write("### 🏭 Stap 1: Kies het type")
-    keuze_terminal = st.selectbox("Voor welke type wil je een conversie doen?", ["RTB", "Douglas Terminal"])
+    st.write("### 🏭 Stap 1: Kies de Terminal")
+    keuze_terminal = st.selectbox("Voor welke terminal wil je een conversie doen?", ["RTB", "Douglas Terminal"])
     
-    st.write(f"### 📂 Stap 2: Upload de {keuze_type} PDF")
+    st.write(f"### 📂 Stap 2: Upload de {keuze_terminal} PDF")
     upped = st.file_uploader("Sleep de PDF in dit vak", type="pdf")
 
 
