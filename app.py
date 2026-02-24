@@ -7,7 +7,7 @@ from datetime import datetime
 import base64
 
 # 🎨 1. PAGINA INSTELLINGEN
-st.set_page_config(page_title="Certus - Terminal Import Tool", page_icon="🚂", layout="wide")
+st.set_page_config(page_title="Certus - PDF Import Tool", page_icon="🚂", layout="wide")
 
 # --- ✨ MAGISCHE START ANIMATIE ✨ ---
 def speel_certus_animatie():
@@ -71,12 +71,12 @@ with st.sidebar:
     
     st.markdown("---")
     st.header("📌 Hoe werkt het?")
-    st.write("1. **Kies** de juiste Terminal in het hoofdmenu.")
+    st.write("1. **Kies** de juiste bron in het hoofdmenu.")
     st.write("2. **Upload** de PDF van de beladingslijst.")
     st.write("3. **Controleer** de tabel.")
     st.write("4. **Download** de Excel voor RailCube.")
     st.markdown("---")
-    st.caption("Operationele Tool v3.1 - RTB & Douglas")
+    st.caption("Operationele Tool v3.3 - Hermes Compatible")
 
 # --- MOTOR 1: RTB CONVERTER ---
 def rtb_pdf_naar_railcube(pdf_file):
@@ -166,7 +166,7 @@ def rtb_pdf_naar_railcube(pdf_file):
     return df_result
 
 
-# --- MOTOR 2: DOUGLAS CONVERTER (Nieuw: Met Regex ipv Tabellen) ---
+# --- MOTOR 2: DOUGLAS CONVERTER (Nieuw: Met exacte Hermes headers) ---
 def douglas_pdf_naar_railcube(pdf_file):
     wagons = []
     try:
@@ -175,43 +175,74 @@ def douglas_pdf_naar_railcube(pdf_file):
         for page in reader.pages:
             text += page.extract_text() + "\n"
             
+        volgorde = 1
         for line in text.split('\n'):
-            # Zoekt feilloos naar de lijn met het wagonnummer en haalt de data eruit
             match = re.search(r'(\d{2}\s*\d{2}\s*\d{4}\s*\d{3}-\d)\s+([A-Za-z])\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)', line)
             
             if match:
                 wagon_raw = match.group(1)
                 loaded_kg_raw = match.group(4)
                 
-                # Haal spaties, streepjes en punten weg voor een strakke import
+                # Formatteren
                 wagon_clean = re.sub(r'[\s-]', '', wagon_raw) 
-                loaded_kg_clean = loaded_kg_raw.replace('.', '')
+                loaded_tonnes = float(loaded_kg_raw.replace('.', '')) / 1000.0
                 
                 wagons.append({
-                    "Wagonnummer": wagon_clean,
-                    "Gewicht_Kg": loaded_kg_clean,
-                    "UN_Code": "UN 1863",
-                    "Goederen_Type": "B0 Diesel Blanc"
+                    "Volgorde": volgorde,
+                    "Kenteken": wagon_clean,
+                    "Netto": loaded_tonnes,
+                    "UN": "1863"
                 })
+                volgorde += 1
                 
-        return pd.DataFrame(wagons)
-        
     except Exception as e:
         st.error(f"Fout bij verwerking Douglas: {e}")
         return pd.DataFrame()
+
+    if not wagons:
+        return pd.DataFrame()
+
+    # Exact dezelfde headers als RTB!
+    headers = [
+        "Type\nType\nType", "Volgorde van de wagens\nOrdre de wagons\nWagons Order",
+        "Goedkeuring materiaal\nApprobation matériel\nApprouval material",
+        "Kenteken wagon (12cijfers)\nImmatriculation de wagon (12 chiffres)\nvehicale registration number (12 figures)",
+        "Netto Gewicht\nPoids nette\nNet Weight", "Tarra Gewicht\nPoids Tare\nTare Weight",
+        "Bruto Gewicht\nPoids Brut\nGross weight", "Lengte\nLongueur\nLength",
+        "Assen\nEssieux\nAxes", "Positie handrem\nPosition du frein\nPosition handbrake",
+        "Gewicht handrem\nPoids frein à main\nWeight handbrake",
+        "Soort rem (manueel-autom)\nType de frein (manuel-automatique)\nType brake (manuel-autom)",
+        "Geremd gewicht ledig (ton)\nPoids frein à vide (tonnes)\nBraked weight empty (ton)",
+        "Omstelgewicht\nPoids pivot\nWeight divider", "Geremd gewicht beladen (ton)\nPoids frein à chargé (tonnes)\nBraked weight loaded (ton)",
+        "Revisiedatum op wagon\nDate de révision du wagon\nRevision date", "Snelheid\nVitesse\nSpeed", "C4\nC4\nC4", "D4\nD4\nD4",
+        "UN Nummer"
+    ]
+    
+    df_result = pd.DataFrame(columns=headers)
+    for w in wagons:
+        row = {
+            headers[1]: w['Volgorde'], 
+            headers[3]: w['Kenteken'],
+            headers[4]: w['Netto'], 
+            headers[19]: w['UN']
+        }
+        df_result = pd.concat([df_result, pd.DataFrame([row])], ignore_index=True)
+    
+    df_result = df_result.fillna("")
+    return df_result
 
 
 # 🎨 3. HOOFDSCHERM INRICHTING
 col_spacer1, col_main, col_spacer2 = st.columns([1, 2, 1])
 
 with col_main:
-    st.title("RailCube Terminal Converter")
-    st.info("👋 **Welkom!** Kies eerst de Terminal en upload daarna de PDF.")
+    st.title("RailCube PDF Converter")
+    st.info("👋 **Welkom!** Kies eerst de bron en upload daarna de PDF.")
     
-    st.write("### 🏭 Stap 1: Kies de Terminal")
-    keuze_terminal = st.selectbox("Voor welke terminal wil je een conversie doen?", ["RTB", "Douglas Terminal"])
+    st.write("### 🏭 Stap 1: Kies het Type / De Bron")
+    keuze_bron = st.selectbox("Van welke partij of locatie is de PDF afkomstig?", ["RTB", "Douglas Terminal"])
     
-    st.write(f"### 📂 Stap 2: Upload de {keuze_terminal} PDF")
+    st.write(f"### 📂 Stap 2: Upload de {keuze_bron} PDF")
     upped = st.file_uploader("Sleep de PDF in dit vak", type="pdf")
 
 
@@ -230,13 +261,13 @@ st.markdown("---")
 
 # 🎨 5. VERWERKING & DOWNLOAD
 if upped:
-    if keuze_terminal == "RTB":
+    if keuze_bron == "RTB":
         df = rtb_pdf_naar_railcube(upped)
     else:
         df = douglas_pdf_naar_railcube(upped)
 
     if not df.empty:
-        st.success(f"✅ Succes! Er zijn **{len(df)} wagens** klaar voor import vanuit de {keuze_terminal} PDF.")
+        st.success(f"✅ Succes! Er zijn **{len(df)} wagens** klaar voor import vanuit de {keuze_bron} PDF.")
         
         st.write("### 📊 Voorbeeld van de Export")
         st.dataframe(df, use_container_width=True)
@@ -254,7 +285,7 @@ if upped:
         col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
         with col_btn2:
             st.write("### 💾 Stap 3: Download")
-            bestandsnaam = f"{keuze_terminal.replace(' ', '_')}_RailCube_Import.xlsx"
+            bestandsnaam = f"{keuze_bron.replace(' ', '_')}_RailCube_Import.xlsx"
             
             st.download_button(
                 label="📥 Download Excel voor RailCube", 
@@ -263,4 +294,4 @@ if upped:
                 use_container_width=True
             )
     else:
-        st.error(f"❌ Geen gegevens gevonden. Controleer of je écht een **{keuze_terminal}** PDF hebt geüpload.")
+        st.error(f"❌ Geen gegevens gevonden. Controleer of je écht een **{keuze_bron}** PDF hebt geüpload.")
