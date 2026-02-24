@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import PyPDF2
-import pdfplumber  # <-- NIEUW: Nodig voor Douglas!
 import re
 from io import BytesIO
 from datetime import datetime
@@ -60,7 +59,6 @@ def speel_certus_animatie():
         except Exception as e:
             st.warning(f"⚠️ Animatie tip: Ik kan 'logo.png' niet vinden. Zorg dat het bestand exact zo heet in GitHub.")
 
-# Roep de animatie aan!
 speel_certus_animatie()
 # ------------------------------------
 
@@ -78,7 +76,7 @@ with st.sidebar:
     st.write("3. **Controleer** de tabel.")
     st.write("4. **Download** de Excel voor RailCube.")
     st.markdown("---")
-    st.caption("Operationele Tool v3.0 - RTB & Douglas")
+    st.caption("Operationele Tool v3.1 - RTB & Douglas")
 
 # --- MOTOR 1: RTB CONVERTER ---
 def rtb_pdf_naar_railcube(pdf_file):
@@ -167,27 +165,37 @@ def rtb_pdf_naar_railcube(pdf_file):
     df_result = df_result.fillna("")
     return df_result
 
-# --- MOTOR 2: DOUGLAS CONVERTER ---
+
+# --- MOTOR 2: DOUGLAS CONVERTER (Nieuw: Met Regex ipv Tabellen) ---
 def douglas_pdf_naar_railcube(pdf_file):
+    wagons = []
     try:
-        with pdfplumber.open(pdf_file) as pdf:
-            tabel_data = pdf.pages[0].extract_table()
-
-        kolommen = ["Nr", "_Genegeerd", "Wagon", "CD_Cijfer", "Max_Ton", "Loaded_Kg", "Volume_L15"]
-        df = pd.DataFrame(tabel_data[1:], columns=kolommen)
+        reader = PyPDF2.PdfReader(pdf_file)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
+            
+        for line in text.split('\n'):
+            # Zoekt feilloos naar de lijn met het wagonnummer en haalt de data eruit
+            match = re.search(r'(\d{2}\s*\d{2}\s*\d{4}\s*\d{3}-\d)\s+([A-Za-z])\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)', line)
+            
+            if match:
+                wagon_raw = match.group(1)
+                loaded_kg_raw = match.group(4)
+                
+                # Haal spaties, streepjes en punten weg voor een strakke import
+                wagon_clean = re.sub(r'[\s-]', '', wagon_raw) 
+                loaded_kg_clean = loaded_kg_raw.replace('.', '')
+                
+                wagons.append({
+                    "Wagonnummer": wagon_clean,
+                    "Gewicht_Kg": loaded_kg_clean,
+                    "UN_Code": "UN 1863",
+                    "Goederen_Type": "B0 Diesel Blanc"
+                })
+                
+        return pd.DataFrame(wagons)
         
-        df = df.drop(columns=["_Genegeerd"])
-        df = df.dropna(subset=["Wagon"])
-        df = df[df["Wagon"].astype(str).str.strip() != "0"]
-        df["Wagon"] = df["Wagon"].str.replace(" ", "")
-        
-        df["UN_Nummer"] = "UN 1863"
-        df["Product"] = "B0 Diesel Blanc"
-
-        import_klaar = df[["Wagon", "Loaded_Kg", "UN_Nummer", "Product"]]
-        import_klaar.columns = ["Wagonnummer", "Gewicht_Kg", "UN_Code", "Goederen_Type"]
-        
-        return import_klaar
     except Exception as e:
         st.error(f"Fout bij verwerking Douglas: {e}")
         return pd.DataFrame()
@@ -198,20 +206,19 @@ col_spacer1, col_main, col_spacer2 = st.columns([1, 2, 1])
 
 with col_main:
     st.title("RailCube Terminal Converter")
-    st.info("👋 **Welkom!** Kies eerst de Terminal en upload daarna de PDF.")
+    st.info("👋 **Welkom!** Kies eerst de Type en upload daarna de PDF.")
     
-    st.write("### 🏭 Stap 1: Kies de Terminal")
-    keuze_terminal = st.selectbox("Voor welke terminal wil je een conversie doen?", ["RTB", "Douglas Terminal"])
+    st.write("### 🏭 Stap 1: Kies de soort PDF")
+    keuze_terminal = st.selectbox("Voor welke type wil je een conversie doen?", ["RTB", "Douglas Terminal"])
     
-    st.write(f"### 📂 Stap 2: Upload de {keuze_terminal} PDF")
+    st.write(f"### 📂 Stap 2: Upload de {keuze} PDF")
     upped = st.file_uploader("Sleep de PDF in dit vak", type="pdf")
+
 
 # 🎨 4. SFEERBEELD 
 if not upped:
     st.markdown("---")
-    
     col_img_links, col_img_midden, col_img_rechts = st.columns([2, 3, 2])
-    
     with col_img_midden:
         try:
             st.image("loco.png", caption="Certus Rail Solutions", use_container_width=True)
@@ -220,9 +227,9 @@ if not upped:
 
 st.markdown("---")
 
+
 # 🎨 5. VERWERKING & DOWNLOAD
 if upped:
-    # Bepaal welke motor gestart moet worden!
     if keuze_terminal == "RTB":
         df = rtb_pdf_naar_railcube(upped)
     else:
@@ -247,8 +254,6 @@ if upped:
         col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
         with col_btn2:
             st.write("### 💾 Stap 3: Download")
-            
-            # Slimme bestandsnaam op basis van keuze
             bestandsnaam = f"{keuze_terminal.replace(' ', '_')}_RailCube_Import.xlsx"
             
             st.download_button(
