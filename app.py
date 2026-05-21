@@ -76,7 +76,24 @@ with st.sidebar:
     st.write("3. **Controleer** de tabel.")
     st.write("4. **Download** de Excel voor RailCube.")
     st.markdown("---")
-    st.caption("Operationele Tool v3.4 - Dynamische UN Codes")
+    st.caption("Operationele Tool v3.5 - Lineas Integratie")
+
+# --- DE HERMES HEADERS (Gedeeld door alle parsers) ---
+headers = [
+    "Type\nType\nType", "Volgorde van de wagens\nOrdre de wagons\nWagons Order",
+    "Goedkeuring materiaal\nApprobation matériel\nApprouval material",
+    "Kenteken wagon (12cijfers)\nImmatriculation de wagon (12 chiffres)\nvehicale registration number (12 figures)",
+    "Netto Gewicht\nPoids nette\nNet Weight", "Tarra Gewicht\nPoids Tare\nTare Weight",
+    "Bruto Gewicht\nPoids Brut\nGross weight", "Lengte\nLongueur\nLength",
+    "Assen\nEssieux\nAxes", "Positie handrem\nPosition du frein\nPosition handbrake",
+    "Gewicht handrem\nPoids frein à main\nWeight handbrake",
+    "Soort rem (manueel-autom)\nType de frein (manuel-automatique)\nType brake (manuel-autom)",
+    "Geremd gewicht ledig (ton)\nPoids frein à vide (tonnes)\nBraked weight empty (ton)",
+    "Omstelgewicht\nPoids pivot\nWeight divider", "Geremd gewicht beladen (ton)\nPoids frein à chargé (tonnes)\nBraked weight loaded (ton)",
+    "Revisiedatum op wagon\nDate de révision du wagon\nRevision date", "Snelheid\nVitesse\nSpeed", "C4\nC4\nC4", "D4\nD4\nD4",
+    "UN Nummer"
+]
+
 
 # --- MOTOR 1: RTB CONVERTER ---
 def rtb_pdf_naar_railcube(pdf_file):
@@ -137,21 +154,6 @@ def rtb_pdf_naar_railcube(pdf_file):
 
     if not wagons:
         return pd.DataFrame()
-
-    headers = [
-        "Type\nType\nType", "Volgorde van de wagens\nOrdre de wagons\nWagons Order",
-        "Goedkeuring materiaal\nApprobation matériel\nApprouval material",
-        "Kenteken wagon (12cijfers)\nImmatriculation de wagon (12 chiffres)\nvehicale registration number (12 figures)",
-        "Netto Gewicht\nPoids nette\nNet Weight", "Tarra Gewicht\nPoids Tare\nTare Weight",
-        "Bruto Gewicht\nPoids Brut\nGross weight", "Lengte\nLongueur\nLength",
-        "Assen\nEssieux\nAxes", "Positie handrem\nPosition du frein\nPosition handbrake",
-        "Gewicht handrem\nPoids frein à main\nWeight handbrake",
-        "Soort rem (manueel-autom)\nType de frein (manuel-automatique)\nType brake (manuel-autom)",
-        "Geremd gewicht ledig (ton)\nPoids frein à vide (tonnes)\nBraked weight empty (ton)",
-        "Omstelgewicht\nPoids pivot\nWeight divider", "Geremd gewicht beladen (ton)\nPoids frein à chargé (tonnes)\nBraked weight loaded (ton)",
-        "Revisiedatum op wagon\nDate de révision du wagon\nRevision date", "Snelheid\nVitesse\nSpeed", "C4\nC4\nC4", "D4\nD4\nD4",
-        "UN Nummer"
-    ]
     
     df_result = pd.DataFrame(columns=headers)
     for w in wagons:
@@ -167,7 +169,6 @@ def rtb_pdf_naar_railcube(pdf_file):
 
 
 # --- MOTOR 2: DOUGLAS CONVERTER ---
-# Let op: Hij accepteert nu de variabele 'un_code' vanuit het hoofdmenu!
 def douglas_pdf_naar_railcube(pdf_file, un_code):
     wagons = []
     try:
@@ -191,7 +192,7 @@ def douglas_pdf_naar_railcube(pdf_file, un_code):
                     "Volgorde": volgorde,
                     "Kenteken": wagon_clean,
                     "Netto": loaded_tonnes,
-                    "UN": un_code  # Hier wordt de gekozen code ingevuld
+                    "UN": un_code 
                 })
                 volgorde += 1
                 
@@ -201,21 +202,6 @@ def douglas_pdf_naar_railcube(pdf_file, un_code):
 
     if not wagons:
         return pd.DataFrame()
-
-    headers = [
-        "Type\nType\nType", "Volgorde van de wagens\nOrdre de wagons\nWagons Order",
-        "Goedkeuring materiaal\nApprobation matériel\nApprouval material",
-        "Kenteken wagon (12cijfers)\nImmatriculation de wagon (12 chiffres)\nvehicale registration number (12 figures)",
-        "Netto Gewicht\nPoids nette\nNet Weight", "Tarra Gewicht\nPoids Tare\nTare Weight",
-        "Bruto Gewicht\nPoids Brut\nGross weight", "Lengte\nLongueur\nLength",
-        "Assen\nEssieux\nAxes", "Positie handrem\nPosition du frein\nPosition handbrake",
-        "Gewicht handrem\nPoids frein à main\nWeight handbrake",
-        "Soort rem (manueel-autom)\nType de frein (manuel-automatique)\nType brake (manuel-autom)",
-        "Geremd gewicht ledig (ton)\nPoids frein à vide (tonnes)\nBraked weight empty (ton)",
-        "Omstelgewicht\nPoids pivot\nWeight divider", "Geremd gewicht beladen (ton)\nPoids frein à chargé (tonnes)\nBraked weight loaded (ton)",
-        "Revisiedatum op wagon\nDate de révision du wagon\nRevision date", "Snelheid\nVitesse\nSpeed", "C4\nC4\nC4", "D4\nD4\nD4",
-        "UN Nummer"
-    ]
     
     df_result = pd.DataFrame(columns=headers)
     for w in wagons:
@@ -231,6 +217,73 @@ def douglas_pdf_naar_railcube(pdf_file, un_code):
     return df_result
 
 
+# --- MOTOR 3: LINEAS CONVERTER (NIEUW!) ---
+def lineas_pdf_naar_railcube(pdf_file):
+    wagons = []
+    try:
+        reader = PyPDF2.PdfReader(pdf_file)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
+            
+        wagon_pattern = re.compile(r'\d{4}\s\d{4}\s\d{3}-\d')
+        volgorde = 1
+        
+        for line in text.split('\n'):
+            wagon_match = wagon_pattern.search(line)
+            if wagon_match:
+                wagon_nr = wagon_match.group(0).replace(" ", "").replace("-", "")
+                
+                un_nr = ""
+                lading = 0.0
+                remgewicht = 0
+                
+                if "1202" in line:
+                    un_nr = "1202"
+                
+                # Haal gewichten eruit (lading 0.0 en remgewicht 28)
+                weights = re.findall(r'\b\d+\.\d+\b|\b\d{2}\b', line)
+                clean_weights = [w for w in weights if w not in ["12", "30"]]
+                
+                for w in clean_weights:
+                    if "." in w:
+                        lading = float(w)
+                    elif w not in ["15", "20"]: # Voorkom conflict met de volgnummers op paginaranden
+                        remgewicht = int(w)
+
+                wagons.append({
+                    "Volgorde": volgorde,
+                    "Kenteken": wagon_nr,
+                    "Netto": lading,
+                    "RemP": remgewicht,
+                    "UN": un_nr,
+                    "Type": "Ketelwagen"
+                })
+                volgorde += 1
+                
+    except Exception as e:
+        st.error(f"Fout bij verwerking Lineas: {e}")
+        return pd.DataFrame()
+
+    if not wagons:
+        return pd.DataFrame()
+
+    df_result = pd.DataFrame(columns=headers)
+    for w in wagons:
+        row = {
+            headers[0]: w['Type'],
+            headers[1]: w['Volgorde'],
+            headers[3]: w['Kenteken'],
+            headers[4]: w['Netto'],
+            headers[14]: w['RemP'],
+            headers[19]: w['UN']
+        }
+        df_result = pd.concat([df_result, pd.DataFrame([row])], ignore_index=True)
+        
+    df_result = df_result.fillna("")
+    return df_result
+
+
 # 🎨 3. HOOFDSCHERM INRICHTING
 col_spacer1, col_main, col_spacer2 = st.columns([1, 2, 1])
 
@@ -239,14 +292,14 @@ with col_main:
     st.info("👋 **Welkom!** Kies eerst de bron en upload daarna de PDF.")
     
     st.write("### 🏭 Stap 1: Kies het Type / De Bron")
-    keuze_bron = st.selectbox("Van welke partij of locatie is de PDF afkomstig?", ["RTB", "Douglas Terminal"])
+    # Lineas toegevoegd aan de dropdown opties!
+    keuze_bron = st.selectbox("Van welke partij of locatie is de PDF afkomstig?", ["RTB", "Douglas Terminal", "Lineas"])
     
-    # NIEUW: Dynamische UN code keuze voor Douglas
+    # Dynamische UN code keuze voor Douglas
     un_keuze = ""
     if keuze_bron == "Douglas Terminal":
         st.write("### 🏷️ Stap 1b: Kies het UN-nummer")
         gekozen_optie = st.radio("Welk product zit er in deze trein?", ["UN 1202 (Diesel/Gasoil)", "UN 1863 (Jet Fuel)"], horizontal=True)
-        # Strip de extra tekst weg zodat we puur het nummer "1202" of "1863" overhouden
         un_keuze = gekozen_optie.split(" ")[1] 
     
     st.write(f"### 📂 Stap 2: Upload de {keuze_bron} PDF")
@@ -271,8 +324,10 @@ if upped:
     # Stuur de juiste variabelen naar de juiste motor
     if keuze_bron == "RTB":
         df = rtb_pdf_naar_railcube(upped)
-    else:
+    elif keuze_bron == "Douglas Terminal":
         df = douglas_pdf_naar_railcube(upped, un_keuze)
+    elif keuze_bron == "Lineas":
+        df = lineas_pdf_naar_railcube(upped)
 
     if not df.empty:
         st.success(f"✅ Succes! Er zijn **{len(df)} wagens** klaar voor import vanuit de {keuze_bron} PDF.")
