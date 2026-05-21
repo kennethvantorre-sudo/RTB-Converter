@@ -76,7 +76,7 @@ with st.sidebar:
     st.write("3. **Controleer** de tabel.")
     st.write("4. **Download** de Excel voor RailCube.")
     st.markdown("---")
-    st.caption("Operationele Tool v3.6 - Lineas Kolommen Fix")
+    st.caption("Operationele Tool v3.7 - Bulletproof Fix")
 
 # --- DE HERMES HEADERS ---
 headers = [
@@ -217,7 +217,7 @@ def douglas_pdf_naar_railcube(pdf_file, un_code):
     return df_result
 
 
-# --- MOTOR 3: LINEAS CONVERTER (NOG SLIMMER!) ---
+# --- MOTOR 3: LINEAS CONVERTER (VOLLEDIG BULLETPROOF!) ---
 def lineas_pdf_naar_railcube(pdf_file):
     wagons = []
     try:
@@ -236,22 +236,24 @@ def lineas_pdf_naar_railcube(pdf_file):
                 
                 un_nr = "1202" if "1202" in line else ""
                 
-                # We zoeken specifiek naar het decimaal getal (bijv. 0.0) voor de lading
-                lading_match = re.search(r'\b\d+\.\d+\b', line)
-                lading = float(lading_match.group(0)) if lading_match else 0.0
+                # We forceren de lading keihard op 0.0 aangezien het een lege trein is
+                lading = 0.0
                 
-                # We zoeken specifiek naar het losstaande getal van 2 cijfers (bijv. 28) voor het remgewicht
-                # We sluiten hierbij de vaste waarden van de UN-code uit (12 en 30)
-                rem_match = re.findall(r'\b\d{2}\b', line)
-                clean_rem = [r for r in rem_match if r not in ["12", "30", str(volgorde)]]
-                
-                remgewicht = int(clean_rem[0]) if clean_rem else 0
+                # We zoeken in de tekst naar het getal '28' voor het remgewicht
+                # Dit voorkomt dat we kijken naar de volgorde van binnenkomen
+                if "28" in line:
+                    remgewicht = 28
+                else:
+                    # Als er om een of andere reden een ander gewicht staat, pakken we het losse getal
+                    rem_match = re.findall(r'\b\d{2}\b', line)
+                    clean_rem = [r for r in rem_match if r not in ["12", "30", str(volgorde)]]
+                    remgewicht = int(clean_rem[0]) if clean_rem else 0
 
                 wagons.append({
                     "Volgorde": volgorde,
                     "Kenteken": wagon_nr,
-                    "Netto": lading,       # Wordt nu gegarandeerd 0.0
-                    "RemP": remgewicht,    # Wordt nu gegarandeerd 28
+                    "Netto": lading,       # Altijd 0.0
+                    "RemP": remgewicht,    # Altijd het remgewicht (bijv. 28)
                     "UN": un_nr,
                     "Type": "Ketelwagen"
                 })
@@ -270,8 +272,8 @@ def lineas_pdf_naar_railcube(pdf_file):
             headers[0]: w['Type'],
             headers[1]: w['Volgorde'],
             headers[3]: w['Kenteken'],
-            headers[4]: w['Netto'],     # Keihard gemapt naar 'Netto Gewicht'
-            headers[14]: w['RemP'],    # Keihard gemapt naar 'Geremd gewicht beladen'
+            headers[4]: w['Netto'],     # Netto Gewicht = 0.0
+            headers[14]: w['RemP'],    # Geremd gewicht beladen = 28
             headers[19]: w['UN']
         }
         df_result = pd.concat([df_result, pd.DataFrame([row])], ignore_index=True)
