@@ -76,9 +76,9 @@ with st.sidebar:
     st.write("3. **Controleer** de tabel.")
     st.write("4. **Download** de Excel voor RailCube.")
     st.markdown("---")
-    st.caption("Operationele Tool v3.5 - Lineas Integratie")
+    st.caption("Operationele Tool v3.5 - Lineas Gewichten Fix")
 
-# --- DE HERMES HEADERS (Gedeeld door alle parsers) ---
+# --- DE HERMES HEADERS (Centraal voor alle motoren) ---
 headers = [
     "Type\nType\nType", "Volgorde van de wagens\nOrdre de wagons\nWagons Order",
     "Goedkeuring materiaal\nApprobation matériel\nApprouval material",
@@ -217,7 +217,7 @@ def douglas_pdf_naar_railcube(pdf_file, un_code):
     return df_result
 
 
-# --- MOTOR 3: LINEAS CONVERTER (NIEUW!) ---
+# --- MOTOR 3: LINEAS CONVERTER (NIEUW & GEFIXT!) ---
 def lineas_pdf_naar_railcube(pdf_file):
     wagons = []
     try:
@@ -241,21 +241,25 @@ def lineas_pdf_naar_railcube(pdf_file):
                 if "1202" in line:
                     un_nr = "1202"
                 
-                # Haal gewichten eruit (lading 0.0 en remgewicht 28)
+                # Haal alle gewichten en getallen uit de regel
                 weights = re.findall(r'\b\d+\.\d+\b|\b\d{2}\b', line)
+                # Kuis de UN-codes en gevaarslabels eruit
                 clean_weights = [w for w in weights if w not in ["12", "30"]]
                 
                 for w in clean_weights:
                     if "." in w:
+                        # Als er een punt in zit (bijv. 0.0), is het ALTIJD de lading!
                         lading = float(w)
-                    elif w not in ["15", "20"]: # Voorkom conflict met de volgnummers op paginaranden
-                        remgewicht = int(w)
+                    else:
+                        # Als het een heel getal is (bijv. 28) én geen volgnummer, is het de rem!
+                        if w not in ["15", "20"]:
+                            remgewicht = int(w)
 
                 wagons.append({
                     "Volgorde": volgorde,
                     "Kenteken": wagon_nr,
-                    "Netto": lading,
-                    "RemP": remgewicht,
+                    "Netto": lading,      # Komt op 0.0
+                    "RemP": remgewicht,   # Komt op 28
                     "UN": un_nr,
                     "Type": "Ketelwagen"
                 })
@@ -274,8 +278,8 @@ def lineas_pdf_naar_railcube(pdf_file):
             headers[0]: w['Type'],
             headers[1]: w['Volgorde'],
             headers[3]: w['Kenteken'],
-            headers[4]: w['Netto'],
-            headers[14]: w['RemP'],
+            headers[4]: w['Netto'],     # Mapt nu correct naar 'Netto Gewicht'
+            headers[14]: w['RemP'],     # Mapt nu correct naar 'Geremd gewicht beladen'
             headers[19]: w['UN']
         }
         df_result = pd.concat([df_result, pd.DataFrame([row])], ignore_index=True)
