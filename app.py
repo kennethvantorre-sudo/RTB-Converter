@@ -76,9 +76,9 @@ with st.sidebar:
     st.write("3. **Controleer** de tabel.")
     st.write("4. **Download** de Excel voor RailCube.")
     st.markdown("---")
-    st.caption("Operationele Tool v3.5 - Lineas Gewichten Fix")
+    st.caption("Operationele Tool v3.6 - Lineas Kolommen Fix")
 
-# --- DE HERMES HEADERS (Centraal voor alle motoren) ---
+# --- DE HERMES HEADERS ---
 headers = [
     "Type\nType\nType", "Volgorde van de wagens\nOrdre de wagons\nWagons Order",
     "Goedkeuring materiaal\nApprobation matériel\nApprouval material",
@@ -217,7 +217,7 @@ def douglas_pdf_naar_railcube(pdf_file, un_code):
     return df_result
 
 
-# --- MOTOR 3: LINEAS CONVERTER (NIEUW & GEFIXT!) ---
+# --- MOTOR 3: LINEAS CONVERTER (NOG SLIMMER!) ---
 def lineas_pdf_naar_railcube(pdf_file):
     wagons = []
     try:
@@ -234,32 +234,24 @@ def lineas_pdf_naar_railcube(pdf_file):
             if wagon_match:
                 wagon_nr = wagon_match.group(0).replace(" ", "").replace("-", "")
                 
-                un_nr = ""
-                lading = 0.0
-                remgewicht = 0
+                un_nr = "1202" if "1202" in line else ""
                 
-                if "1202" in line:
-                    un_nr = "1202"
+                # We zoeken specifiek naar het decimaal getal (bijv. 0.0) voor de lading
+                lading_match = re.search(r'\b\d+\.\d+\b', line)
+                lading = float(lading_match.group(0)) if lading_match else 0.0
                 
-                # Haal alle gewichten en getallen uit de regel
-                weights = re.findall(r'\b\d+\.\d+\b|\b\d{2}\b', line)
-                # Kuis de UN-codes en gevaarslabels eruit
-                clean_weights = [w for w in weights if w not in ["12", "30"]]
+                # We zoeken specifiek naar het losstaande getal van 2 cijfers (bijv. 28) voor het remgewicht
+                # We sluiten hierbij de vaste waarden van de UN-code uit (12 en 30)
+                rem_match = re.findall(r'\b\d{2}\b', line)
+                clean_rem = [r for r in rem_match if r not in ["12", "30", str(volgorde)]]
                 
-                for w in clean_weights:
-                    if "." in w:
-                        # Als er een punt in zit (bijv. 0.0), is het ALTIJD de lading!
-                        lading = float(w)
-                    else:
-                        # Als het een heel getal is (bijv. 28) én geen volgnummer, is het de rem!
-                        if w not in ["15", "20"]:
-                            remgewicht = int(w)
+                remgewicht = int(clean_rem[0]) if clean_rem else 0
 
                 wagons.append({
                     "Volgorde": volgorde,
                     "Kenteken": wagon_nr,
-                    "Netto": lading,      # Komt op 0.0
-                    "RemP": remgewicht,   # Komt op 28
+                    "Netto": lading,       # Wordt nu gegarandeerd 0.0
+                    "RemP": remgewicht,    # Wordt nu gegarandeerd 28
                     "UN": un_nr,
                     "Type": "Ketelwagen"
                 })
@@ -278,8 +270,8 @@ def lineas_pdf_naar_railcube(pdf_file):
             headers[0]: w['Type'],
             headers[1]: w['Volgorde'],
             headers[3]: w['Kenteken'],
-            headers[4]: w['Netto'],     # Mapt nu correct naar 'Netto Gewicht'
-            headers[14]: w['RemP'],     # Mapt nu correct naar 'Geremd gewicht beladen'
+            headers[4]: w['Netto'],     # Keihard gemapt naar 'Netto Gewicht'
+            headers[14]: w['RemP'],    # Keihard gemapt naar 'Geremd gewicht beladen'
             headers[19]: w['UN']
         }
         df_result = pd.concat([df_result, pd.DataFrame([row])], ignore_index=True)
@@ -296,10 +288,8 @@ with col_main:
     st.info("👋 **Welkom!** Kies eerst de bron en upload daarna de PDF.")
     
     st.write("### 🏭 Stap 1: Kies het Type / De Bron")
-    # Lineas toegevoegd aan de dropdown opties!
     keuze_bron = st.selectbox("Van welke partij of locatie is de PDF afkomstig?", ["RTB", "Douglas Terminal", "Lineas"])
     
-    # Dynamische UN code keuze voor Douglas
     un_keuze = ""
     if keuze_bron == "Douglas Terminal":
         st.write("### 🏷️ Stap 1b: Kies het UN-nummer")
@@ -325,7 +315,6 @@ st.markdown("---")
 
 # 🎨 5. VERWERKING & DOWNLOAD
 if upped:
-    # Stuur de juiste variabelen naar de juiste motor
     if keuze_bron == "RTB":
         df = rtb_pdf_naar_railcube(upped)
     elif keuze_bron == "Douglas Terminal":
