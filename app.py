@@ -3,11 +3,10 @@ import pandas as pd
 import PyPDF2
 import re
 from io import BytesIO
-from datetime import datetime
 import base64
 
 # 🎨 1. PAGINA INSTELLINGEN
-st.set_page_config(page_title="Certus - PDF & Excel Import Tool", page_icon="🚂", layout="wide")
+st.set_page_config(page_title="Certus - PDF Import Tool", page_icon="🚂", layout="wide")
 
 # --- ✨ MAGISCHE START ANIMATIE ✨ ---
 def speel_certus_animatie():
@@ -71,14 +70,14 @@ with st.sidebar:
     
     st.markdown("---")
     st.header("📌 Hoe werkt het?")
-    st.write("1. **Kies** de juiste bron/partij in het menu.")
-    st.write("2. **Upload** de PDF (of Excel voor Strabag).")
-    st.write("3. **Controleer** de tabel in de preview.")
-    st.write("4. **Download** de afgewerkte Hermes Excel voor RailCube.")
+    st.write("1. **Kies** de juiste bron in het hoofdmenu.")
+    st.write("2. **Upload** het gevraagde bestand.")
+    st.write("3. **Controleer** de tabel.")
+    st.write("4. **Download** de Excel voor RailCube.")
     st.markdown("---")
-    st.caption("Operationele Tool v4.0 - Strabag Excel Support")
+    st.caption("Operationele Tool v4.7 - Strabag Excel Support")
 
-# --- DE HERMES HEADERS ---
+# --- DE HERMES HEADERS (Centraal voor alle motoren) ---
 headers = [
     "Type\nType\nType", "Volgorde van de wagens\nOrdre de wagons\nWagons Order",
     "Goedkeuring materiaal\nApprobation matériel\nApprouval material",
@@ -93,7 +92,6 @@ headers = [
     "Revisiedatum op wagon\nDate de révision du wagon\nRevision date", "Snelheid\nVitesse\nSpeed", "C4\nC4\nC4", "D4\nD4\nD4",
     "UN Nummer"
 ]
-
 
 # --- MOTOR 1: RTB CONVERTER ---
 def rtb_pdf_naar_railcube(pdf_file):
@@ -167,7 +165,6 @@ def rtb_pdf_naar_railcube(pdf_file):
     df_result = df_result.fillna("")
     return df_result
 
-
 # --- MOTOR 2: DOUGLAS CONVERTER ---
 def douglas_pdf_naar_railcube(pdf_file, un_code):
     wagons = []
@@ -216,7 +213,6 @@ def douglas_pdf_naar_railcube(pdf_file, un_code):
     df_result = df_result.fillna("")
     return df_result
 
-
 # --- MOTOR 3: LINEAS CONVERTER ---
 def lineas_pdf_naar_railcube(pdf_file):
     wagons = []
@@ -233,6 +229,7 @@ def lineas_pdf_naar_railcube(pdf_file):
             wagon_match = wagon_pattern.search(line)
             if wagon_match:
                 wagon_nr = wagon_match.group(0).replace(" ", "").replace("-", "")
+                
                 un_nr = "1202" if "1202" in line else ""
                 lading = 0.0
                 
@@ -263,103 +260,129 @@ def lineas_pdf_naar_railcube(pdf_file):
     df_result = pd.DataFrame(columns=headers)
     for w in wagons:
         row = {
-            headers[0]: w['Type'], headers[1]: w['Volgorde'], headers[3]: w['Kenteken'],
-            headers[4]: w['Netto'], headers[14]: w['RemP'], headers[19]: w['UN']
+            headers[0]: w['Type'],
+            headers[1]: w['Volgorde'],
+            headers[3]: w['Kenteken'],
+            headers[4]: w['Netto'],
+            headers[14]: w['RemP'],
+            headers[19]: w['UN']
         }
         df_result = pd.concat([df_result, pd.DataFrame([row])], ignore_index=True)
         
     df_result = df_result.fillna("")
     return df_result
 
-
-# --- MOTOR 4: STRABAG EXCEL CONVERTER (NIIEUW EN BULLETPROOF!) ---
+# --- MOTOR 4: STRABAG EXCEL CONVERTER ---
 def strabag_excel_naar_railcube(excel_file):
     try:
-        # Lees de Excel in vanaf rij 7 (index 6)
-        df_raw = pd.read_excel(excel_file, header=None, skiprows=6)
+        xl = pd.ExcelFile(excel_file, engine='openpyxl')
+        target_sheet = None
+        for sheet in xl.sheet_names:
+            if "WAGENLISTE" in sheet.upper():
+                target_sheet = sheet
+                break
+        
+        if not target_sheet:
+            st.error("❌ Kon het tabblad 'Wagenliste' niet vinden in de Excel!")
+            return pd.DataFrame()
+            
+        df_raw = xl.parse(sheet_name=target_sheet, header=None)
         wagons = []
-        volgorde = 1
         
         for idx, row in df_raw.iterrows():
-            # Stop zodra we beneden aan de lijst komen bij de gele locomotief-regels
-            if pd.isna(row[0]) or "Lok" in str(row[5]) or "Totaal" in str(row[0]):
-                if len(wagons) > 0 and pd.isna(row[0]): # Veiligheid voor lege tussenlijnen
+            val_col_0 = str(row[0]).strip() if pd.notna(row[0]) else ""
+            
+            # De data begint exact waar kolom A een volgnummer bevat, én kolom B niet leeg is
+            if val_col_0.isdigit() and pd.notna(row[1]):
+                try:
+                    # Smijt spaties weg en herstel voorloopnullen voor de 5 wagon-kolommen (index 1 t/m 5)
+                    d1 = str(row[1]).split('.')[0].strip().zfill(2)
+                    d2 = str(row[2]).split('.')[0].strip().zfill(2)
+                    d3 = str(row[3]).split('.')[0].strip().zfill(4)
+                    d4 = str(row[4]).split('.')[0].strip().zfill(3)
+                    d5 = str(row[5]).split('.')[0].strip()
+                    wagon_nr = f"{d1}{d2}{d3}{d4}{d5}"
+                    
+                    if len(wagon_nr) < 11:
+                        continue
+                        
+                    wagon_type = str(row[6]).strip() if pd.notna(row[6]) else "Kgs"
+                    
+                    # Assen bepalen (default naar 4 indien leeg)
+                    if pd.notna(row[7]) and str(row[7]).split('.')[0].isdigit():
+                        assen = int(str(row[7]).split('.')[0])
+                    else:
+                        assen = 4
+                        
+                    # Uitlezen gewichten en lengtes uit de juiste kolommen (9, 10, 11, 12, 14)
+                    lengte = float(str(row[9]).replace(',', '.').strip()) if pd.notna(row[9]) else 0.0
+                    tarra = float(str(row[10]).replace(',', '.').strip()) if pd.notna(row[10]) else 0.0
+                    lading = float(str(row[11]).replace(',', '.').strip()) if pd.notna(row[11]) else 0.0
+                    bruto = float(str(row[12]).replace(',', '.').strip()) if pd.notna(row[12]) else tarra
+                    remgewicht = float(str(row[14]).replace(',', '.').strip()) if pd.notna(row[14]) else 0.0
+                    
+                    wagons.append({
+                        "Type": wagon_type,
+                        "Volgorde": int(val_col_0),
+                        "Kenteken": wagon_nr,
+                        "Netto": lading,
+                        "Tarra": tarra,
+                        "Bruto": bruto,
+                        "Lengte": lengte,
+                        "Assen": assen,
+                        "RemP": remgewicht
+                    })
+                except:
                     continue
-                if "Lok" in str(row[5]) or "Totaal" in str(row[0]):
-                    break
-            
-            # Plak de eerste 5 kolommen aan elkaar voor het 12-cijferig kenteken
-            deel1 = str(row[0]).strip().split('.')[0].zfill(2)
-            deel2 = str(row[1]).strip().split('.')[0].zfill(2)
-            deel3 = str(row[2]).strip().split('.')[0].zfill(4)
-            deel4 = str(row[3]).strip().split('.')[0].zfill(3)
-            deel5 = str(row[4]).strip().split('.')[0]
-            
-            wagon_nr = f"{deel1}{deel2}{deel3}{deel4}{deel5}"
-            
-            # Haal de overige velden op uit de juiste kolommen
-            wagon_type = str(row[5]).strip()
-            assen = int(row[6]) if pd.notna(row[6]) else 4
-            lengte = float(str(row[7]).replace(',', '.')) if pd.notna(row[7]) else 0.0
-            tarra = float(str(row[8]).replace(',', '.')) if pd.notna(row[8]) else 0.0
-            remgewicht = float(str(row[9]).replace(',', '.')) if pd.notna(row[9]) else 0.0
-            
-            wagons.append({
-                "Type": wagon_type,
-                "Volgorde": volgorde,
-                "Kenteken": wagon_nr,
-                "Netto": 0.0, # Ledige wagons
-                "Tarra": tarra,
-                "Bruto": tarra, # Bruto = Tarra + 0.0 lading
-                "Lengte": lengte,
-                "Assen": assen,
-                "RemP": remgewicht
-            })
-            volgorde += 1
-            
+                    
         if not wagons:
             return pd.DataFrame()
             
         df_result = pd.DataFrame(columns=headers)
         for w in wagons:
             row_dict = {
-                headers[0]: w['Type'], headers[1]: w['Volgorde'], headers[3]: w['Kenteken'],
-                headers[4]: w['Netto'], headers[5]: w['Tarra'], headers[6]: w['Bruto'],
-                headers[7]: w['Lengte'], headers[8]: w['Assen'], headers[14]: w['RemP']
+                headers[0]: w['Type'],
+                headers[1]: w['Volgorde'],
+                headers[3]: w['Kenteken'],
+                headers[4]: w['Netto'],
+                headers[5]: w['Tarra'],
+                headers[6]: w['Bruto'],
+                headers[7]: w['Lengte'],
+                headers[8]: w['Assen'],
+                headers[14]: w['RemP']
             }
             df_result = pd.concat([df_result, pd.DataFrame([row_dict])], ignore_index=True)
-            
-        return df_result.fillna("")
+        return df_result
     except Exception as e:
         st.error(f"Fout bij verwerking Strabag Excel: {e}")
         return pd.DataFrame()
-
 
 # 🎨 3. HOOFDSCHERM INRICHTING
 col_spacer1, col_main, col_spacer2 = st.columns([1, 2, 1])
 
 with col_main:
-    st.title("RailCube PDF & Excel Converter")
-    st.info("👋 **Welkom Kenneth!** Kies de bron en upload het bestand.")
+    st.title("RailCube PDF Converter")
+    st.info("👋 **Welkom!** Kies eerst de bron en upload daarna de PDF.")
     
     st.write("### 🏭 Stap 1: Kies het Type / De Bron")
-    # Strabag toegevoegd aan de dropdown!
-    keuze_bron = st.selectbox("Van welke partij of locatie is het bestand?", ["RTB", "Douglas Terminal", "Lineas", "Strabag (Excel)"])
+    # Strabag veilig toegevoegd als Excel-optie!
+    keuze_bron = st.selectbox("Van welke partij of locatie is de PDF afkomstig?", ["RTB", "Douglas Terminal", "Lineas", "Strabag (Excel)"])
     
     un_keuze = ""
     if keuze_bron == "Douglas Terminal":
         st.write("### 🏷️ Stap 1b: Kies het UN-nummer")
-        gekozen_optie = st.radio("Welk product?", ["UN 1202 (Diesel/Gasoil)", "UN 1863 (Jet Fuel)"], horizontal=True)
+        gekozen_optie = st.radio("Welk product zit er in deze trein?", ["UN 1202 (Diesel/Gasoil)", "UN 1863 (Jet Fuel)"], horizontal=True)
         un_keuze = gekozen_optie.split(" ")[1] 
     
-    # Dynamisch text tonen afhankelijk van bestandstype
-    file_type = ["xlsx", "xls"] if "Strabag" in keuze_bron else ["pdf"]
-    label_text = f"Sleep de Strabag EXCEL in dit vak" if "Strabag" in keuze_bron else f"Sleep de {keuze_bron} PDF in dit vak"
+    # Dynamisch wisselen tussen PDF en Excel filters
+    is_strabag = "Strabag" in keuze_bron
+    file_type = ["xlsx", "xls"] if is_strabag else ["pdf"]
+    label_text = "Sleep de Strabag Excel in dit vak" if is_strabag else f"Sleep de {keuze_bron} PDF in dit vak"
     
-    st.write(f"### 📂 Stap 2: Upload het bestand")
+    st.write(f"### 📂 Stap 2: Upload de {keuze_bron} {'Excel' if is_strabag else 'PDF'}")
     upped = st.file_uploader(label_text, type=file_type)
 
-# 🎨 4. SFEERBEELD
+# 🎨 4. SFEERBEELD (Uw originele layout-blok, exact behouden!)
 if not upped:
     st.markdown("---")
     col_img_links, col_img_midden, col_img_rechts = st.columns([2, 3, 2])
@@ -373,19 +396,19 @@ st.markdown("---")
 
 # 🎨 5. VERWERKING & DOWNLOAD
 if upped:
+    df = pd.DataFrame()
     if keuze_bron == "RTB":
         df = rtb_pdf_naar_railcube(upped)
     elif keuze_bron == "Douglas Terminal":
         df = douglas_pdf_naar_railcube(upped, un_keuze)
     elif keuze_bron == "Lineas":
         df = lineas_pdf_naar_railcube(upped)
-    elif "Strabag" in keuze_bron:
+    elif is_strabag:
         df = strabag_excel_naar_railcube(upped)
 
     if not df.empty:
-        st.success(f"✅ Succes! Er zijn **{len(df)} wagens** verwerkt en klaargezet in Hermes-formaat.")
-        
-        st.write("### 📊 Voorbeeld van de Export (Hermes Formaat)")
+        st.success(f"✅ Succes! Er zijn **{len(df)} wagens** klaar voor import vanuit de {keuze_bron} lijst.")
+        st.write("### 📊 Voorbeeld van de Export")
         st.dataframe(df, use_container_width=True)
         
         output = BytesIO()
@@ -401,7 +424,7 @@ if upped:
         col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
         with col_btn2:
             st.write("### 💾 Stap 3: Download")
-            bestandsnaam = f"{keuze_bron.replace(' ', '_')}_Hermes_RailCube.xlsx"
+            bestandsnaam = f"{keuze_bron.replace(' ', '_')}_RailCube_Import.xlsx"
             
             st.download_button(
                 label="📥 Download Excel voor RailCube", 
@@ -410,4 +433,4 @@ if upped:
                 use_container_width=True
             )
     else:
-        st.error(f"❌ Geen gegevens gevonden of fout in bestand. Controleer uw upload.")
+        st.error(f"❌ Geen gegevens gevonden. Controleer of je écht een geldig **{keuze_bron}** bestand hebt geüpload.")
