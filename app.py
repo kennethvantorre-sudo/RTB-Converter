@@ -29,24 +29,24 @@ def speel_certus_animatie():
                 display: flex;
                 justify-content: center;
                 align-items: center;
-                animation: fadeOut 1.5s forwards;
+                animation: fadeOut 1s forwards;
                 animation-delay: 2s;
                 pointer-events: none;
             }}
             #splash-logo {{
                 width: 350px;
-                animation: moveAndShrink 1.5s forwards;
+                animation: moveAndShrink 1s forwards;
                 animation-delay: 1.5s;
             }}
             
             @keyframes fadeOut {{
-                0% {{ opacity: 1; }}
-                100% {{ opacity: 0; visibility: hidden; }}
+                0% {{ opacity: 1; visibility: visible; }}
+                100% {{ opacity: 0; visibility: hidden; display: none !important; }}
             }}
             
             @keyframes moveAndShrink {{
-                0% {{ transform: scale(1) translate(0, 0); opacity: 1; }}
-                100% {{ transform: scale(0.3) translate(-100vw, -100vh); opacity: 0; }}
+                0% {{ transform: scale(1); opacity: 1; }}
+                100% {{ transform: scale(0.3); opacity: 0; }}
             }}
             </style>
             <div id="splash-screen">
@@ -75,7 +75,7 @@ with st.sidebar:
     st.write("3. **Controleer** de tabel.")
     st.write("4. **Download** de Excel voor RailCube.")
     st.markdown("---")
-    st.caption("Operationele Tool v4.5")
+    st.caption("Operationele Tool v4.6")
 
 # --- DE HERMES HEADERS ---
 headers = [
@@ -164,3 +164,64 @@ def rtb_pdf_naar_railcube(pdf_file):
     return df_result.fillna("")
 
 # --- MOTOR 2: DOUGLAS CONVERTER ---
+def douglas_pdf_naar_railcube(pdf_file, un_code):
+    wagons = []
+    try:
+        reader = PyPDF2.PdfReader(pdf_file)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
+            
+        volgorde = 1
+        for line in text.split('\n'):
+            match = re.search(r'(\d{2}\s*\d{2}\s*\d{4}\s*\d{3}-\d)\s+([A-Za-z])\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)', line)
+            if match:
+                wagon_raw = match.group(1)
+                loaded_kg_raw = match.group(4)
+                wagon_clean = re.sub(r'[\s-]', '', wagon_raw) 
+                loaded_tonnes = float(loaded_kg_raw.replace('.', '')) / 1000.0
+                
+                wagons.append({
+                    "Volgorde": volgorde, "Kenteken": wagon_clean,
+                    "Netto": loaded_tonnes, "UN": un_code 
+                })
+                volgorde += 1
+    except Exception as e:
+        st.error(f"Fout bij verwerking Douglas: {e}")
+        return pd.DataFrame()
+
+    if not wagons:
+        return pd.DataFrame()
+    
+    df_result = pd.DataFrame(columns=headers)
+    for w in wagons:
+        row = {
+            headers[1]: w['Volgorde'], headers[3]: w['Kenteken'],
+            headers[4]: w['Netto'], headers[19]: w['UN']
+        }
+        df_result = pd.concat([df_result, pd.DataFrame([row])], ignore_index=True)
+    return df_result.fillna("")
+
+# --- MOTOR 3: LINEAS CONVERTER ---
+def lineas_pdf_naar_railcube(pdf_file):
+    wagons = []
+    try:
+        reader = PyPDF2.PdfReader(pdf_file)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
+            
+        wagon_pattern = re.compile(r'\d{4}\s\d{4}\s\d{3}-\d')
+        volgorde = 1
+        
+        for line in text.split('\n'):
+            wagon_match = wagon_pattern.search(line)
+            if wagon_match:
+                wagon_nr = wagon_match.group(0).replace(" ", "").replace("-", "")
+                un_nr = "1202" if "1202" in line else ""
+                lading = 0.0
+                
+                if "28" in line:
+                    remgewicht = 28
+                else:
+                    rem_match = re.findall
