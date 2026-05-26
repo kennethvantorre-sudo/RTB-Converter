@@ -38,12 +38,10 @@ def speel_certus_animatie():
                 animation: moveAndShrink 1s forwards;
                 animation-delay: 1.5s;
             }}
-            
             @keyframes fadeOut {{
                 0% {{ opacity: 1; visibility: visible; }}
-                100% {{ opacity: 0; visibility: hidden; display: none !important; }}
+                100% {{ opacity: 0; visibility: hidden; }}
             }}
-            
             @keyframes moveAndShrink {{
                 0% {{ transform: scale(1); opacity: 1; }}
                 100% {{ transform: scale(0.3); opacity: 0; }}
@@ -56,7 +54,7 @@ def speel_certus_animatie():
             st.markdown(css_animatie, unsafe_allow_html=True)
             st.session_state.animatie_gespeeld = True
         except Exception as e:
-            pass
+            st.warning("⚠️ Animatie tip: Ik kan 'logo.png' niet vinden.")
 
 speel_certus_animatie()
 # ------------------------------------
@@ -75,7 +73,7 @@ with st.sidebar:
     st.write("3. **Controleer** de tabel.")
     st.write("4. **Download** de Excel voor RailCube.")
     st.markdown("---")
-    st.caption("Operationele Tool v4.6")
+    st.caption("Operationele Tool v4.7")
 
 # --- DE HERMES HEADERS ---
 headers = [
@@ -224,4 +222,10 @@ def lineas_pdf_naar_railcube(pdf_file):
                 if "28" in line:
                     remgewicht = 28
                 else:
-                    rem_match = re.findall
+                    rem_match = re.findall(r'\b\d{2}\b', line)
+                    clean_rem = [r for r in rem_match if r not in ["12", "30", str(volgorde)]]
+                    remgewicht = int(clean_rem[0]) if clean_rem else 0
+
+                wagons.append({
+                    "Volgorde": volgorde, "Kenteken": wagon_nr, "Netto": lading,
+                    "RemP": remgewicht, "UN":
